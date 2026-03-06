@@ -1,29 +1,44 @@
 import React, { useEffect, useRef } from "react";
 import { Animated, Image, StyleSheet, Text } from "react-native";
 import { router } from "expo-router";
+import { useAuth } from "../lib/auth-context";
+import { supabase } from "../lib/supabase";
 
 export default function Opening() {
   const opacity = useRef(new Animated.Value(1)).current;
+  const { session, loading } = useAuth();
 
   useEffect(() => {
-    const SPLASH_MS = 4000;
+    if (loading) return;
 
-    const FADE_MS = 600;
-    const fadeStart = SPLASH_MS - FADE_MS;
+    const navigate = async () => {
+      let destination: "/login" | "/setup" = "/login";
 
-    const fadeTimer = setTimeout(() => {
+      if (session) {
+        // Check if user already has a household
+        const { data } = await supabase
+          .from("household_members")
+          .select("household_id")
+          .eq("user_id", session.user.id)
+          .limit(1)
+          .single();
+
+        destination = data ? "/setup" : "/setup";
+        // TODO: once a home/dashboard screen exists, route there if data exists
+      }
+
       Animated.timing(opacity, {
         toValue: 0,
-        duration: FADE_MS,
+        duration: 600,
         useNativeDriver: true,
       }).start(() => {
-        // replace so user can’t go "back" to splash
-        router.replace("/login");
+        router.replace(destination);
       });
-    }, fadeStart);
+    };
 
-    return () => clearTimeout(fadeTimer);
-  }, [opacity]);
+    const timer = setTimeout(navigate, 3400);
+    return () => clearTimeout(timer);
+  }, [loading, session, opacity]);
 
   return (
     <Animated.View style={[styles.container, { opacity }]}>
@@ -38,21 +53,20 @@ export default function Opening() {
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
+  container: {
+    flex: 1,
     backgroundColor: "#79B3F2",
     justifyContent: "center",
     alignItems: "center"
   },
-  logo: { 
-    width: 250, 
-    height: 250, 
+  logo: {
+    width: 250,
+    height: 250,
     borderRadius: 24,
   },
-  title: { 
-    color: "white", 
-    fontSize: 35, 
+  title: {
+    color: "white",
+    fontSize: 35,
     fontWeight: "800",
- 
   },
 });

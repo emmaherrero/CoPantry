@@ -6,11 +6,15 @@ export default function Input({
   secureTextEntry,
   keyboardType,
   autoCapitalize = "none",
+  value,
+  onChangeText,
 }: {
   placeholder: string;
   secureTextEntry?: boolean;
   keyboardType?: "default" | "email-address";
   autoCapitalize?: "none" | "sentences" | "words" | "characters";
+  value?: string;
+  onChangeText?: (text: string) => void;
 }) {
   return (
     <View style={styles.wrap}>
@@ -22,6 +26,8 @@ export default function Input({
         keyboardType={keyboardType}
         autoCapitalize={autoCapitalize}
         autoCorrect={false}
+        value={value}
+        onChangeText={onChangeText}
       />
     </View>
   );
