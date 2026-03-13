@@ -6,11 +6,13 @@ export default function Button({
   onPress,
   style,
   disabled,
+  variant = "primary",
 }: {
   title: string;
   onPress: () => void;
   style?: ViewStyle;
   disabled?: boolean;
+  variant?: "primary" | "pill";
 }) {
   return (
     <Pressable
@@ -18,29 +20,47 @@ export default function Button({
       disabled={disabled}
       style={({ pressed }) => [
         styles.button,
+        variant === "pill" && styles.pill,
         disabled && styles.disabled,
         pressed && !disabled && { opacity: 0.9 },
         style,
       ]}
     >
-      <Text style={styles.text}>{title}</Text>
+      <Text style={[styles.text, variant === "pill" && styles.pillText]}>
+        {title}
+      </Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   button: {
-    backgroundColor: "#6EA31C",
-    paddingVertical: 14,
-    borderRadius: 12,
+    backgroundColor: "#70ab25",
+    paddingVertical: 16,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
   },
   text: {
     color: "white",
     fontWeight: "800",
-    fontSize: 14,
+    fontSize: 18,
+  },
+  pill: {
+    borderRadius: 50,
+    paddingHorizontal: 30,
+    paddingVertical: 10,
+    alignSelf: "center",
+  },
+  pillText: {
+    fontSize: 24,
+    fontWeight: "700",
   },
   disabled: {
     opacity: 0.55,

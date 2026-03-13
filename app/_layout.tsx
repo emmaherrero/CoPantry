@@ -8,7 +8,15 @@ export default function RootLayout() {
         screenOptions={{
           headerShown: false,
         }}
-      />
+      >
+        <Stack.Screen name="index" />
+        <Stack.Screen name="login" />
+        <Stack.Screen name="create-account" />
+        <Stack.Screen name="setup" />
+        <Stack.Screen name="create-household" />
+        <Stack.Screen name="join-household" />
+        <Stack.Screen name="(tabs)" />
+      </Stack>
     </AuthProvider>
   );
 }
