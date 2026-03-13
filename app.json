@@ -9,12 +9,11 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.barhop-gainesville.CoPantry"
     },
     "android": {
-      "adaptiveIcon": {
-        
-      },
+      "adaptiveIcon": {},
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
