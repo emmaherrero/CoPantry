@@ -20,7 +20,7 @@ export default function Input({
     <View style={styles.wrap}>
       <TextInput
         placeholder={placeholder}
-        placeholderTextColor="#6B7280"
+        placeholderTextColor="#999"
         style={styles.input}
         secureTextEntry={secureTextEntry}
         keyboardType={keyboardType}
@@ -36,14 +36,20 @@ export default function Input({
 const styles = StyleSheet.create({
   wrap: {
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 10,
+    borderColor: "#000",
+    borderRadius: 8,
     backgroundColor: "white",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
   },
   input: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: "#111827",
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+    fontSize: 18,
+    fontWeight: "500",
+    color: "#000",
   },
 });

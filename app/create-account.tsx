@@ -1,9 +1,10 @@
 import React, { useState } from "react";
-import { StyleSheet, Text, View, Pressable, Alert } from "react-native";
+import { StyleSheet, Text, View, Pressable } from "react-native";
 import { router } from "expo-router";
 import Input from "../components/Input";
 import Button from "../components/Button";
 import { supabase } from "../lib/supabase";
+import { showAlert } from "../lib/alert";
 
 export default function CreateAccount() {
   const [name, setName] = useState("");
@@ -14,17 +15,17 @@ export default function CreateAccount() {
 
   const handleSignUp = async () => {
     if (!name || !email || !password || !confirm) {
-      Alert.alert("Missing fields", "Please fill in all fields.");
+      showAlert("Missing fields", "Please fill in all fields.");
       return;
     }
 
     if (password !== confirm) {
-      Alert.alert("Password mismatch", "Passwords do not match.");
+      showAlert("Password mismatch", "Passwords do not match.");
       return;
     }
 
     if (password.length < 6) {
-      Alert.alert("Weak password", "Password must be at least 6 characters.");
+      showAlert("Weak password", "Password must be at least 6 characters.");
       return;
     }
 
@@ -39,7 +40,7 @@ export default function CreateAccount() {
     setLoading(false);
 
     if (error) {
-      Alert.alert("Sign up failed", error.message);
+      showAlert("Sign up failed", error.message);
       return;
     }
 
@@ -49,7 +50,7 @@ export default function CreateAccount() {
   return (
     <View style={styles.container}>
       <Pressable onPress={() => router.back()} style={styles.back}>
-        <Text style={styles.backText}>‹</Text>
+        <Text style={styles.arrow}>{"<"}</Text>
       </Pressable>
 
       <Text style={styles.h1}>Create account</Text>
@@ -82,7 +83,7 @@ export default function CreateAccount() {
       </View>
 
       <Button
-        title={loading ? "Creating account…" : "Create account"}
+        title={loading ? "Creating account\u2026" : "Create account"}
         onPress={handleSignUp}
         disabled={loading}
       />
@@ -98,12 +99,21 @@ export default function CreateAccount() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "white", paddingTop: 60, paddingHorizontal: 22 },
+  container: {
+    flex: 1,
+    backgroundColor: "white",
+    paddingTop: 60,
+    paddingHorizontal: 28,
+  },
   back: { width: 44, height: 44, justifyContent: "center" },
-  backText: { fontSize: 30, marginTop: -6 },
-  h1: { fontSize: 35, fontWeight: "700", marginTop: 16 },
-  form: { gap: 15, marginTop: 50 },
-  row: { flexDirection: "row", marginTop: 12, justifyContent: "center", alignContent: "center" },
-  muted: { color: "#6B7280" },
-  link: { color: "#6EA31C", fontWeight: "700" },
+  arrow: { fontSize: 24, fontWeight: "700" },
+  h1: { fontSize: 41, fontWeight: "700", marginTop: 16 },
+  form: { gap: 20, marginTop: 50 },
+  row: {
+    flexDirection: "row",
+    marginTop: 20,
+    justifyContent: "center",
+  },
+  muted: { color: "#000", fontSize: 18 },
+  link: { color: "#000", fontWeight: "700", fontSize: 18, textDecorationLine: "underline" },
 });

@@ -28,6 +28,7 @@ export type Database = {
           invite_code?: string;
           created_at?: string;
         };
+        Relationships: [];
       };
       profiles: {
         Row: {
@@ -48,6 +49,7 @@ export type Database = {
           avatar_url?: string | null;
           created_at?: string;
         };
+        Relationships: [];
       };
       household_members: {
         Row: {
@@ -71,6 +73,22 @@ export type Database = {
           role?: "owner" | "member";
           joined_at?: string;
         };
+        Relationships: [
+          {
+            foreignKeyName: "household_members_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "household_members_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       food_items: {
         Row: {
@@ -121,6 +139,22 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [
+          {
+            foreignKeyName: "food_items_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "food_items_added_by_fkey";
+            columns: ["added_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       recipes: {
         Row: {
@@ -156,7 +190,26 @@ export type Database = {
           created_by?: string;
           created_at?: string;
         };
+        Relationships: [
+          {
+            foreignKeyName: "recipes_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "recipes_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
       };
+    };
+    Views: {
+      [_ in never]: never;
     };
     Functions: {
       get_my_household_id: {
@@ -167,6 +220,9 @@ export type Database = {
     Enums: {
       member_role: "owner" | "member";
       storage_location: "fridge" | "freezer" | "pantry";
+    };
+    CompositeTypes: {
+      [_ in never]: never;
     };
   };
 };

@@ -12,10 +12,9 @@ export default function Opening() {
     if (loading) return;
 
     const navigate = async () => {
-      let destination: "/login" | "/setup" = "/login";
+      let destination: string = "/login";
 
       if (session) {
-        // Check if user already has a household
         const { data } = await supabase
           .from("household_members")
           .select("household_id")
@@ -23,8 +22,7 @@ export default function Opening() {
           .limit(1)
           .single();
 
-        destination = data ? "/setup" : "/setup";
-        // TODO: once a home/dashboard screen exists, route there if data exists
+        destination = data ? "/(tabs)/inventory" : "/setup";
       }
 
       Animated.timing(opacity, {
@@ -32,7 +30,7 @@ export default function Opening() {
         duration: 600,
         useNativeDriver: true,
       }).start(() => {
-        router.replace(destination);
+        router.replace(destination as any);
       });
     };
 
@@ -55,18 +53,19 @@ export default function Opening() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#79B3F2",
+    backgroundColor: "#75b0f2",
     justifyContent: "center",
-    alignItems: "center"
+    alignItems: "center",
   },
   logo: {
-    width: 250,
-    height: 250,
+    width: 318,
+    height: 261,
     borderRadius: 24,
   },
   title: {
     color: "white",
-    fontSize: 35,
-    fontWeight: "800",
+    fontSize: 40,
+    fontWeight: "700",
+    marginTop: 12,
   },
 });

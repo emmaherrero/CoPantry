@@ -1,9 +1,10 @@
 import React, { useState } from "react";
-import { StyleSheet, Text, View, Pressable, Alert } from "react-native";
+import { StyleSheet, Text, View, Pressable } from "react-native";
 import { router } from "expo-router";
 import Input from "../components/Input";
 import Button from "../components/Button";
 import { supabase } from "../lib/supabase";
+import { showAlert } from "../lib/alert";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -12,29 +13,41 @@ export default function Login() {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert("Missing fields", "Please enter your email and password.");
+      showAlert("Missing fields", "Please enter your email and password.");
       return;
     }
 
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
     });
     setLoading(false);
 
     if (error) {
-      Alert.alert("Login failed", error.message);
+      showAlert("Login failed", error.message);
       return;
     }
 
-    router.replace("/setup");
+    // Check if user has a household
+    const { data: membership } = await supabase
+      .from("household_members")
+      .select("household_id")
+      .eq("user_id", data.user.id)
+      .limit(1)
+      .single();
+
+    if (membership) {
+      router.replace("/(tabs)/inventory" as any);
+    } else {
+      router.replace("/setup");
+    }
   };
 
   return (
     <View style={styles.container}>
       <Pressable onPress={() => router.back()} style={styles.back}>
-        <Text style={styles.backText}>‹</Text>
+        <Text style={styles.arrow}>{"<"}</Text>
       </Pressable>
 
       <Text style={styles.h1}>Log in</Text>
@@ -55,14 +68,13 @@ export default function Login() {
       </View>
 
       <Button
-        style={styles.loginBut}
-        title={loading ? "Logging in…" : "Log in"}
+        title={loading ? "Logging in\u2026" : "Log in"}
         onPress={handleLogin}
         disabled={loading}
       />
 
       <View style={styles.row}>
-        <Text style={styles.muted}>Don't have an account? </Text>
+        <Text style={styles.muted}>Don\u2019t have an account? </Text>
         <Pressable onPress={() => router.push("/create-account")}>
           <Text style={styles.link}>Create account</Text>
         </Pressable>
@@ -72,13 +84,21 @@ export default function Login() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "white", paddingTop: 60, paddingHorizontal: 22 },
+  container: {
+    flex: 1,
+    backgroundColor: "white",
+    paddingTop: 60,
+    paddingHorizontal: 28,
+  },
   back: { width: 44, height: 44, justifyContent: "center" },
-  backText: { fontSize: 30, marginTop: -6 },
-  h1: { fontSize: 35, fontWeight: "700", marginTop: 16 },
-  form: { gap: 15, marginTop: 50 },
-  loginBut: { marginTop: 15 },
-  row: { flexDirection: "row", marginTop: 12, justifyContent: "center", alignContent: "center" },
-  muted: { color: "#6B7280" },
-  link: { color: "#6EA31C", fontWeight: "700" },
+  arrow: { fontSize: 24, fontWeight: "700" },
+  h1: { fontSize: 41, fontWeight: "700", marginTop: 16 },
+  form: { gap: 20, marginTop: 50 },
+  row: {
+    flexDirection: "row",
+    marginTop: 20,
+    justifyContent: "center",
+  },
+  muted: { color: "#000", fontSize: 18 },
+  link: { color: "#000", fontWeight: "700", fontSize: 18, textDecorationLine: "underline" },
 });
