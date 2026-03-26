@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -12,6 +12,7 @@ import { useHousehold } from "../../lib/household-context";
 import { useAuth } from "../../lib/auth-context";
 import type { FoodItem } from "../../lib/database.types";
 import { supabase } from "../../lib/supabase";
+import { AppTheme, Fonts } from "../../constants/theme";
 
 function getExpirationInfo(item: FoodItem) {
   if (!item.expiration_date) return { label: "No date", color: "#d9d9d9", textColor: "#000" };
@@ -24,6 +25,31 @@ function getExpirationInfo(item: FoodItem) {
   if (diffDays < 0) return { label: "Expired", color: "#ff4d50", textColor: "#000" };
   if (diffDays <= 3) return { label: `${diffDays} day${diffDays !== 1 ? "s" : ""} until expiration`, color: "#fa9632", textColor: "#000" };
   return { label: `${diffDays} days until expiration`, color: "#24bb4d", textColor: "#000" };
+}
+
+type SortOption = "newest" | "expiring" | "name";
+
+const SORT_OPTIONS: SortOption[] = ["newest", "expiring", "name"];
+
+function getNextSortOption(current: SortOption) {
+  const currentIndex = SORT_OPTIONS.indexOf(current);
+  return SORT_OPTIONS[(currentIndex + 1) % SORT_OPTIONS.length];
+}
+
+function getSortLabel(sortOption: SortOption) {
+  switch (sortOption) {
+    case "expiring":
+      return "Expiring";
+    case "name":
+      return "Name";
+    default:
+      return "Newest";
+  }
+}
+
+function getExpirationSortValue(item: FoodItem) {
+  if (!item.expiration_date) return Number.POSITIVE_INFINITY;
+  return new Date(item.expiration_date).getTime();
 }
 
 function StatBox({
@@ -72,7 +98,7 @@ function FoodItemCard({ item, onIncrement, onDecrement }: {
       <View style={styles.itemQty}>
         <Pressable onPress={onDecrement} style={styles.qtyBtn}>
           <View style={styles.qtyCircle}>
-            <Text style={styles.qtySymbol}>{"\u2212"}</Text>
+            <Text style={styles.qtySymbol}>-</Text>
           </View>
         </Pressable>
         <Text style={styles.qtyValue}>{item.quantity}</Text>
@@ -88,32 +114,61 @@ function FoodItemCard({ item, onIncrement, onDecrement }: {
 
 export default function Inventory() {
   const { session } = useAuth();
-  const { foodItems, loading, refresh } = useHousehold();
+  const { foodItems, loading, upsertFoodItem, removeFoodItem } = useHousehold();
+  const [sortOption, setSortOption] = useState<SortOption>("newest");
 
   // Filter to user's own items
   const myItems = foodItems.filter((item) => item.added_by === session?.user.id);
+  const sortedItems = [...myItems].sort((a, b) => {
+    switch (sortOption) {
+      case "expiring":
+        return getExpirationSortValue(a) - getExpirationSortValue(b);
+      case "name":
+        return a.product_name.localeCompare(b.product_name);
+      default:
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    }
+  });
 
   const now = new Date();
-  const totalItems = myItems.length;
-  const expiring = myItems.filter((item) => {
-    if (!item.expiration_date) return false;
+  const totalItems = myItems.reduce((sum, item) => sum + item.quantity, 0);
+  const expiring = myItems.reduce((sum, item) => {
+    if (!item.expiration_date) return sum;
     const diff = new Date(item.expiration_date).getTime() - now.getTime();
     const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-    return days > 0 && days <= 7;
-  }).length;
-  const expired = myItems.filter((item) => {
-    if (!item.expiration_date) return false;
-    return new Date(item.expiration_date) < now;
-  }).length;
+    return days > 0 && days <= 7 ? sum + item.quantity : sum;
+  }, 0);
+  const expired = myItems.reduce((sum, item) => {
+    if (!item.expiration_date) return sum;
+    return new Date(item.expiration_date) < now ? sum + item.quantity : sum;
+  }, 0);
 
   const updateQuantity = async (item: FoodItem, delta: number) => {
     const newQty = item.quantity + delta;
+    const previousItem = item;
+
     if (newQty <= 0) {
-      await supabase.from("food_items").delete().eq("id", item.id);
+      removeFoodItem(item.id);
+
+      const { error } = await supabase.from("food_items").delete().eq("id", item.id);
+      if (error) {
+        upsertFoodItem(previousItem);
+      }
     } else {
-      await supabase.from("food_items").update({ quantity: newQty }).eq("id", item.id);
+      upsertFoodItem({
+        ...item,
+        quantity: newQty,
+        updated_at: new Date().toISOString(),
+      });
+
+      const { error } = await supabase
+        .from("food_items")
+        .update({ quantity: newQty })
+        .eq("id", item.id);
+      if (error) {
+        upsertFoodItem(previousItem);
+      }
     }
-    refresh();
   };
 
   return (
@@ -129,19 +184,22 @@ export default function Inventory() {
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Items</Text>
-          <View style={styles.sortRow}>
+          <Pressable
+            style={styles.sortRow}
+            onPress={() => setSortOption((current) => getNextSortOption(current))}
+          >
             <Ionicons name="filter-outline" size={20} color="#000" />
-            <Text style={styles.sortText}>Sort by</Text>
-          </View>
+            <Text style={styles.sortText}>Sort: {getSortLabel(sortOption)}</Text>
+          </Pressable>
         </View>
 
         {loading ? (
           <Text style={styles.emptyText}>Loading...</Text>
-        ) : myItems.length === 0 ? (
+        ) : sortedItems.length === 0 ? (
           <Text style={styles.emptyText}>No items yet. Tap + to add your first item.</Text>
         ) : (
           <View style={styles.itemList}>
-            {myItems.map((item) => (
+            {sortedItems.map((item) => (
               <FoodItemCard
                 key={item.id}
                 item={item}
@@ -157,9 +215,9 @@ export default function Inventory() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "white" },
+  container: { flex: 1, backgroundColor: AppTheme.colors.page },
   scroll: { paddingTop: 60, paddingHorizontal: 28, paddingBottom: 20 },
-  title: { fontSize: 36, fontWeight: "700" },
+  title: { fontSize: 38, fontWeight: "800", fontFamily: Fonts.rounded, color: AppTheme.colors.text },
   stats: {
     flexDirection: "row",
     gap: 12,
@@ -167,18 +225,20 @@ const styles = StyleSheet.create({
   },
   statBox: {
     flex: 1,
-    backgroundColor: "#d9d9d9",
-    borderRadius: 5,
+    backgroundColor: AppTheme.colors.surface,
+    borderRadius: AppTheme.radius.md,
     padding: 12,
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    elevation: 2,
+    borderWidth: 2,
+    borderColor: AppTheme.colors.line,
+    shadowColor: "#dfcfc4",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    elevation: 5,
   },
-  statCount: { fontSize: 36, fontWeight: "700" },
-  statLabel: { fontSize: 13, color: "#000", marginTop: 2 },
+  statCount: { fontSize: 36, fontWeight: "800", fontFamily: Fonts.rounded },
+  statLabel: { fontSize: 13, color: AppTheme.colors.muted, marginTop: 4, fontFamily: Fonts.rounded },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -186,50 +246,61 @@ const styles = StyleSheet.create({
     marginTop: 30,
     marginBottom: 16,
   },
-  sectionTitle: { fontSize: 32, fontWeight: "700" },
-  sortRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  sortText: { fontSize: 15, color: "#3282fa" },
-  emptyText: { color: "#999", fontSize: 16, textAlign: "center", marginTop: 40 },
+  sectionTitle: { fontSize: 30, fontWeight: "800", fontFamily: Fonts.rounded, color: AppTheme.colors.text },
+  sortRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: AppTheme.colors.cardPeach,
+    borderWidth: 2,
+    borderColor: AppTheme.colors.line,
+    borderRadius: AppTheme.radius.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  sortText: { fontSize: 15, color: AppTheme.colors.text, fontFamily: Fonts.rounded, fontWeight: "600" },
+  emptyText: { color: AppTheme.colors.muted, fontSize: 16, textAlign: "center", marginTop: 40, fontFamily: Fonts.rounded },
   itemList: { gap: 12 },
   itemCard: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 10,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: "#000",
-    backgroundColor: "white",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    elevation: 2,
+    padding: 12,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: AppTheme.colors.line,
+    backgroundColor: AppTheme.colors.surface,
+    shadowColor: "#e4d2c7",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    elevation: 5,
   },
   itemImageWrap: { marginRight: 12 },
-  itemImage: { width: 52, height: 52, borderRadius: 4 },
+  itemImage: { width: 56, height: 56, borderRadius: 18 },
   itemImagePlaceholder: {
-    width: 52,
-    height: 52,
-    backgroundColor: "#d9d9d9",
-    borderRadius: 4,
+    width: 56,
+    height: 56,
+    backgroundColor: AppTheme.colors.surfaceAlt,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
   },
   itemInfo: { flex: 1, gap: 4 },
-  itemName: { fontSize: 16, fontWeight: "500" },
-  expBadge: { borderRadius: 5, paddingHorizontal: 6, paddingVertical: 1, alignSelf: "flex-start" },
-  expText: { fontSize: 9, fontWeight: "700" },
+  itemName: { fontSize: 17, fontWeight: "700", fontFamily: Fonts.rounded, color: AppTheme.colors.text },
+  expBadge: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, alignSelf: "flex-start" },
+  expText: { fontSize: 10, fontWeight: "700", fontFamily: Fonts.rounded, color: AppTheme.colors.text },
   itemQty: { flexDirection: "row", alignItems: "center", gap: 6 },
   qtyBtn: { padding: 2 },
   qtyCircle: {
-    width: 26,
-    height: 25,
-    borderRadius: 13,
-    borderWidth: 1.5,
-    borderColor: "#70ab25",
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 2,
+    borderColor: AppTheme.colors.line,
+    backgroundColor: AppTheme.colors.cardMint,
     alignItems: "center",
     justifyContent: "center",
   },
-  qtySymbol: { fontSize: 16, color: "#70ab25", fontWeight: "600" },
-  qtyValue: { fontSize: 20, fontWeight: "500", minWidth: 20, textAlign: "center" },
+  qtySymbol: { fontSize: 16, color: AppTheme.colors.text, fontWeight: "700", fontFamily: Fonts.rounded },
+  qtyValue: { fontSize: 20, fontWeight: "700", fontFamily: Fonts.rounded, minWidth: 20, textAlign: "center", color: AppTheme.colors.text },
 });

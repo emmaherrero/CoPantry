@@ -27,6 +27,34 @@ export const Colors = {
   },
 };
 
+export const AppTheme = {
+  colors: {
+    page: "#eef6ff",
+    surface: "#ffffff",
+    surfaceAlt: "#dcecff",
+    cardLavender: "#e4f0ff",
+    cardMint: "#dff6ff",
+    cardPeach: "#e8f3ff",
+    line: "#1f4368",
+    text: "#17324d",
+    muted: "#5d7894",
+    accent: "#75b0f2",
+    accentDark: "#4a8ed9",
+    accentSoft: "#d6e8ff",
+    green: "#4f9ccf",
+    blue: "#5c8df6",
+    orange: "#7db9ff",
+    red: "#f17d96",
+    cream: "#f6fbff",
+  },
+  radius: {
+    sm: 10,
+    md: 18,
+    lg: 28,
+    pill: 999,
+  },
+};
+
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */

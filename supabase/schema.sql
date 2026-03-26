@@ -135,6 +135,19 @@ create policy "Users can view own profile"
   on public.profiles for select
   using (auth.uid() = id);
 
+create policy "Members can view household profiles"
+  on public.profiles for select
+  using (
+    exists (
+      select 1
+      from public.household_members viewer_membership
+      join public.household_members target_membership
+        on viewer_membership.household_id = target_membership.household_id
+      where viewer_membership.user_id = auth.uid()
+        and target_membership.user_id = public.profiles.id
+    )
+  );
+
 create policy "Users can update own profile"
   on public.profiles for update
   using (auth.uid() = id);

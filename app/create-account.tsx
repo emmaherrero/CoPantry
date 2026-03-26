@@ -5,6 +5,7 @@ import Input from "../components/Input";
 import Button from "../components/Button";
 import { supabase } from "../lib/supabase";
 import { showAlert } from "../lib/alert";
+import { AppTheme, Fonts } from "../constants/theme";
 
 export default function CreateAccount() {
   const [name, setName] = useState("");
@@ -83,7 +84,7 @@ export default function CreateAccount() {
       </View>
 
       <Button
-        title={loading ? "Creating account\u2026" : "Create account"}
+        title={loading ? "Creating account..." : "Create account"}
         onPress={handleSignUp}
         disabled={loading}
       />
@@ -101,19 +102,19 @@ export default function CreateAccount() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "white",
+    backgroundColor: AppTheme.colors.page,
     paddingTop: 60,
     paddingHorizontal: 28,
   },
   back: { width: 44, height: 44, justifyContent: "center" },
-  arrow: { fontSize: 24, fontWeight: "700" },
-  h1: { fontSize: 41, fontWeight: "700", marginTop: 16 },
+  arrow: { fontSize: 24, fontWeight: "700", color: AppTheme.colors.text },
+  h1: { fontSize: 41, fontWeight: "800", marginTop: 16, fontFamily: Fonts.rounded, color: AppTheme.colors.text },
   form: { gap: 20, marginTop: 50 },
   row: {
     flexDirection: "row",
     marginTop: 20,
     justifyContent: "center",
   },
-  muted: { color: "#000", fontSize: 18 },
-  link: { color: "#000", fontWeight: "700", fontSize: 18, textDecorationLine: "underline" },
+  muted: { color: AppTheme.colors.muted, fontSize: 18, fontFamily: Fonts.rounded },
+  link: { color: AppTheme.colors.accentDark, fontWeight: "700", fontSize: 18, textDecorationLine: "underline", fontFamily: Fonts.rounded },
 });

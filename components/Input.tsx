@@ -1,5 +1,6 @@
 import React from "react";
 import { StyleSheet, TextInput, View } from "react-native";
+import { AppTheme, Fonts } from "../constants/theme";
 
 export default function Input({
   placeholder,
@@ -11,7 +12,7 @@ export default function Input({
 }: {
   placeholder: string;
   secureTextEntry?: boolean;
-  keyboardType?: "default" | "email-address";
+  keyboardType?: "default" | "email-address" | "numeric";
   autoCapitalize?: "none" | "sentences" | "words" | "characters";
   value?: string;
   onChangeText?: (text: string) => void;
@@ -20,7 +21,7 @@ export default function Input({
     <View style={styles.wrap}>
       <TextInput
         placeholder={placeholder}
-        placeholderTextColor="#999"
+        placeholderTextColor={AppTheme.colors.muted}
         style={styles.input}
         secureTextEntry={secureTextEntry}
         keyboardType={keyboardType}
@@ -35,21 +36,22 @@ export default function Input({
 
 const styles = StyleSheet.create({
   wrap: {
-    borderWidth: 1,
-    borderColor: "#000",
-    borderRadius: 8,
-    backgroundColor: "white",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    elevation: 2,
+    borderWidth: 2,
+    borderColor: AppTheme.colors.line,
+    borderRadius: AppTheme.radius.md,
+    backgroundColor: AppTheme.colors.surface,
+    shadowColor: "#c9b3a6",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    elevation: 4,
   },
   input: {
     paddingHorizontal: 16,
     paddingVertical: 15,
     fontSize: 18,
+    fontFamily: Fonts.rounded,
     fontWeight: "500",
-    color: "#000",
+    color: AppTheme.colors.text,
   },
 });

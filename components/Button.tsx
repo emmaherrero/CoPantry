@@ -1,5 +1,6 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, ViewStyle } from "react-native";
+import { AppTheme, Fonts } from "../constants/theme";
 
 export default function Button({
   title,
@@ -35,27 +36,31 @@ export default function Button({
 
 const styles = StyleSheet.create({
   button: {
-    backgroundColor: "#70ab25",
+    backgroundColor: AppTheme.colors.accent,
     paddingVertical: 16,
-    borderRadius: 8,
+    borderRadius: AppTheme.radius.md,
+    borderWidth: 2,
+    borderColor: AppTheme.colors.line,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 14,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 3,
+    shadowColor: "#8d5066",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    elevation: 6,
   },
   text: {
-    color: "white",
+    color: AppTheme.colors.text,
+    fontFamily: Fonts.rounded,
     fontWeight: "800",
+    letterSpacing: 0.2,
     fontSize: 18,
   },
   pill: {
-    borderRadius: 50,
-    paddingHorizontal: 30,
-    paddingVertical: 10,
+    borderRadius: AppTheme.radius.pill,
+    paddingHorizontal: 34,
+    paddingVertical: 12,
     alignSelf: "center",
   },
   pillText: {
@@ -63,6 +68,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   disabled: {
-    opacity: 0.55,
+    opacity: 0.6,
   },
 });

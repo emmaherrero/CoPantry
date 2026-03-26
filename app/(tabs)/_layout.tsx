@@ -3,6 +3,7 @@ import { Tabs } from "expo-router";
 import { View, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { HouseholdProvider } from "../../lib/household-context";
+import { AppTheme, Fonts } from "../../constants/theme";
 
 function TabIcon({
   name,
@@ -30,8 +31,8 @@ export default function TabLayout() {
       <Tabs
         screenOptions={{
           headerShown: false,
-          tabBarActiveTintColor: "#70ab25",
-          tabBarInactiveTintColor: "#000",
+          tabBarActiveTintColor: AppTheme.colors.accentDark,
+          tabBarInactiveTintColor: AppTheme.colors.muted,
           tabBarStyle: styles.tabBar,
           tabBarLabelStyle: styles.tabLabel,
         }}
@@ -87,32 +88,36 @@ export default function TabLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    height: 96,
-    backgroundColor: "white",
-    borderTopWidth: 0,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 4,
-    elevation: 8,
+    height: 98,
+    backgroundColor: AppTheme.colors.surface,
+    borderTopWidth: 2,
+    borderTopColor: AppTheme.colors.line,
+    shadowColor: "#d6b9aa",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 12,
     paddingTop: 8,
   },
   tabLabel: {
     fontSize: 13,
-    fontWeight: "400",
+    fontFamily: Fonts.rounded,
+    fontWeight: "600",
   },
   addButton: {
     width: 57,
     height: 57,
     borderRadius: 29,
-    backgroundColor: "#70ab25",
+    backgroundColor: AppTheme.colors.accent,
+    borderWidth: 2,
+    borderColor: AppTheme.colors.line,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowColor: "#e181a3",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.24,
+    shadowRadius: 16,
+    elevation: 8,
   },
 });

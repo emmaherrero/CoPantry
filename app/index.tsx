@@ -3,6 +3,7 @@ import { Animated, Image, StyleSheet, Text } from "react-native";
 import { router } from "expo-router";
 import { useAuth } from "../lib/auth-context";
 import { supabase } from "../lib/supabase";
+import { Fonts } from "../constants/theme";
 
 export default function Opening() {
   const opacity = useRef(new Animated.Value(1)).current;
@@ -65,6 +66,7 @@ const styles = StyleSheet.create({
   title: {
     color: "white",
     fontSize: 40,
+    fontFamily: Fonts.rounded,
     fontWeight: "700",
     marginTop: 12,
   },

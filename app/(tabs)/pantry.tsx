@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -6,11 +6,13 @@ import {
   ScrollView,
   Pressable,
   Image,
+  Modal,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useHousehold } from "../../lib/household-context";
 import type { FoodItem } from "../../lib/database.types";
 import { supabase } from "../../lib/supabase";
+import { AppTheme, Fonts } from "../../constants/theme";
 
 function getExpirationInfo(item: FoodItem) {
   if (!item.expiration_date)
@@ -34,6 +36,31 @@ function getExpirationInfo(item: FoodItem) {
     color: "#24bb4d",
     textColor: "#000",
   };
+}
+
+type SortOption = "newest" | "expiring" | "name";
+
+const SORT_OPTIONS: SortOption[] = ["newest", "expiring", "name"];
+
+function getNextSortOption(current: SortOption) {
+  const currentIndex = SORT_OPTIONS.indexOf(current);
+  return SORT_OPTIONS[(currentIndex + 1) % SORT_OPTIONS.length];
+}
+
+function getSortLabel(sortOption: SortOption) {
+  switch (sortOption) {
+    case "expiring":
+      return "Expiring";
+    case "name":
+      return "Name";
+    default:
+      return "Newest";
+  }
+}
+
+function getExpirationSortValue(item: FoodItem) {
+  if (!item.expiration_date) return Number.POSITIVE_INFINITY;
+  return new Date(item.expiration_date).getTime();
 }
 
 const MEMBER_COLORS = ["#8bcef0", "#ceb1ff", "#ffbbee", "#ffd6a5", "#a5ffd6"];
@@ -104,7 +131,7 @@ function FoodItemCard({
       <View style={styles.itemQty}>
         <Pressable onPress={onDecrement} style={styles.qtyBtn}>
           <View style={styles.qtyCircle}>
-            <Text style={styles.qtySymbol}>{"\u2212"}</Text>
+            <Text style={styles.qtySymbol}>-</Text>
           </View>
         </Pressable>
         <Text style={styles.qtyValue}>{item.quantity}</Text>
@@ -119,20 +146,33 @@ function FoodItemCard({
 }
 
 export default function Pantry() {
-  const { household, foodItems, members, loading, refresh } = useHousehold();
+  const { household, foodItems, members, loading, upsertFoodItem, removeFoodItem } =
+    useHousehold();
+  const [sortOption, setSortOption] = useState<SortOption>("newest");
+  const [showHelp, setShowHelp] = useState(false);
 
   const now = new Date();
-  const totalItems = foodItems.length;
-  const expiring = foodItems.filter((item) => {
-    if (!item.expiration_date) return false;
+  const sortedItems = [...foodItems].sort((a, b) => {
+    switch (sortOption) {
+      case "expiring":
+        return getExpirationSortValue(a) - getExpirationSortValue(b);
+      case "name":
+        return a.product_name.localeCompare(b.product_name);
+      default:
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    }
+  });
+  const totalItems = foodItems.reduce((sum, item) => sum + item.quantity, 0);
+  const expiring = foodItems.reduce((sum, item) => {
+    if (!item.expiration_date) return sum;
     const diff = new Date(item.expiration_date).getTime() - now.getTime();
     const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-    return days > 0 && days <= 7;
-  }).length;
-  const expired = foodItems.filter((item) => {
-    if (!item.expiration_date) return false;
-    return new Date(item.expiration_date) < now;
-  }).length;
+    return days > 0 && days <= 7 ? sum + item.quantity : sum;
+  }, 0);
+  const expired = foodItems.reduce((sum, item) => {
+    if (!item.expiration_date) return sum;
+    return new Date(item.expiration_date) < now ? sum + item.quantity : sum;
+  }, 0);
 
   const getMemberName = (userId: string) => {
     const member = members.find((m) => m.user_id === userId);
@@ -146,15 +186,30 @@ export default function Pantry() {
 
   const updateQuantity = async (item: FoodItem, delta: number) => {
     const newQty = item.quantity + delta;
+    const previousItem = item;
+
     if (newQty <= 0) {
-      await supabase.from("food_items").delete().eq("id", item.id);
+      removeFoodItem(item.id);
+
+      const { error } = await supabase.from("food_items").delete().eq("id", item.id);
+      if (error) {
+        upsertFoodItem(previousItem);
+      }
     } else {
-      await supabase
+      upsertFoodItem({
+        ...item,
+        quantity: newQty,
+        updated_at: new Date().toISOString(),
+      });
+
+      const { error } = await supabase
         .from("food_items")
         .update({ quantity: newQty })
         .eq("id", item.id);
+      if (error) {
+        upsertFoodItem(previousItem);
+      }
     }
-    refresh();
   };
 
   return (
@@ -165,7 +220,9 @@ export default function Pantry() {
       >
         <View style={styles.headerRow}>
           <Text style={styles.title}>{household?.name ?? "Pantry"}</Text>
-          <Ionicons name="settings-outline" size={28} color="#000" />
+          <Pressable style={styles.settingsBubble} onPress={() => setShowHelp(true)}>
+            <Ionicons name="sparkles-outline" size={22} color={AppTheme.colors.text} />
+          </Pressable>
         </View>
         {household?.invite_code && (
           <Text style={styles.codeText}>
@@ -181,21 +238,24 @@ export default function Pantry() {
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Items</Text>
-          <View style={styles.sortRow}>
+          <Pressable
+            style={styles.sortRow}
+            onPress={() => setSortOption((current) => getNextSortOption(current))}
+          >
             <Ionicons name="filter-outline" size={20} color="#000" />
-            <Text style={styles.sortText}>Sort by</Text>
-          </View>
+            <Text style={styles.sortText}>Sort: {getSortLabel(sortOption)}</Text>
+          </Pressable>
         </View>
 
         {loading ? (
           <Text style={styles.emptyText}>Loading...</Text>
-        ) : foodItems.length === 0 ? (
+        ) : sortedItems.length === 0 ? (
           <Text style={styles.emptyText}>
             No items in the pantry yet. Tap + to add items.
           </Text>
         ) : (
           <View style={styles.itemList}>
-            {foodItems.map((item) => (
+            {sortedItems.map((item) => (
               <FoodItemCard
                 key={item.id}
                 item={item}
@@ -208,35 +268,161 @@ export default function Pantry() {
           </View>
         )}
       </ScrollView>
+
+      <Modal
+        visible={showHelp}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowHelp(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowHelp(false)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>How Pantry Works</Text>
+              <Pressable onPress={() => setShowHelp(false)} style={styles.closeButton}>
+                <Ionicons name="close" size={18} color={AppTheme.colors.text} />
+              </Pressable>
+            </View>
+
+            <Text style={styles.modalBody}>
+              Pantry shows the whole household{"'"}s food in one place.
+            </Text>
+            <Text style={styles.modalBullet}>
+              • My Inventory only shows items assigned to you.
+            </Text>
+            <Text style={styles.modalBullet}>
+              • Tap + to add a new item to the pantry.
+            </Text>
+            <Text style={styles.modalBullet}>
+              • Use + and - on any card to change quantity quickly.
+            </Text>
+            <Text style={styles.modalBullet}>
+              • Sort cycles through newest, expiring, and name.
+            </Text>
+            <Text style={styles.modalBullet}>
+              • Expiration badges show no date, expiring soon, or expired.
+            </Text>
+
+            <Pressable style={styles.modalButton} onPress={() => setShowHelp(false)}>
+              <Text style={styles.modalButtonText}>Got it</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "white" },
+  container: { flex: 1, backgroundColor: AppTheme.colors.page },
   scroll: { paddingTop: 60, paddingHorizontal: 28, paddingBottom: 20 },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  title: { fontSize: 36, fontWeight: "700" },
-  codeText: { fontSize: 13, color: "#000", marginTop: 4 },
+  title: { fontSize: 38, fontWeight: "800", fontFamily: Fonts.rounded, color: AppTheme.colors.text },
+  codeText: { fontSize: 13, color: AppTheme.colors.muted, marginTop: 6, fontFamily: Fonts.rounded },
+  settingsBubble: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: AppTheme.colors.cardLavender,
+    borderWidth: 2,
+    borderColor: AppTheme.colors.line,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(18, 42, 68, 0.35)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: AppTheme.colors.surface,
+    borderRadius: 28,
+    borderWidth: 2,
+    borderColor: AppTheme.colors.line,
+    padding: 22,
+    shadowColor: "#7ea9d7",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: "800",
+    fontFamily: Fonts.rounded,
+    color: AppTheme.colors.text,
+  },
+  closeButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: AppTheme.colors.surfaceAlt,
+    borderWidth: 2,
+    borderColor: AppTheme.colors.line,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalBody: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: AppTheme.colors.text,
+    fontFamily: Fonts.rounded,
+    marginBottom: 10,
+  },
+  modalBullet: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: AppTheme.colors.muted,
+    fontFamily: Fonts.rounded,
+    marginBottom: 8,
+  },
+  modalButton: {
+    marginTop: 14,
+    alignSelf: "flex-start",
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: AppTheme.radius.pill,
+    backgroundColor: AppTheme.colors.accent,
+    borderWidth: 2,
+    borderColor: AppTheme.colors.line,
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: "700",
+    fontFamily: Fonts.rounded,
+    color: AppTheme.colors.text,
+  },
   stats: { flexDirection: "row", gap: 12, marginTop: 20 },
   statBox: {
     flex: 1,
-    backgroundColor: "#d9d9d9",
-    borderRadius: 5,
+    backgroundColor: AppTheme.colors.surface,
+    borderRadius: AppTheme.radius.md,
     padding: 12,
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    elevation: 2,
+    borderWidth: 2,
+    borderColor: AppTheme.colors.line,
+    shadowColor: "#dfcfc4",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    elevation: 5,
   },
-  statCount: { fontSize: 36, fontWeight: "700" },
-  statLabel: { fontSize: 13, color: "#000", marginTop: 2 },
+  statCount: { fontSize: 36, fontWeight: "800", fontFamily: Fonts.rounded },
+  statLabel: { fontSize: 13, color: AppTheme.colors.muted, marginTop: 4, fontFamily: Fonts.rounded },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -244,72 +430,86 @@ const styles = StyleSheet.create({
     marginTop: 30,
     marginBottom: 16,
   },
-  sectionTitle: { fontSize: 32, fontWeight: "700" },
-  sortRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  sortText: { fontSize: 15, color: "#3282fa" },
+  sectionTitle: { fontSize: 30, fontWeight: "800", fontFamily: Fonts.rounded, color: AppTheme.colors.text },
+  sortRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: AppTheme.colors.cardLavender,
+    borderWidth: 2,
+    borderColor: AppTheme.colors.line,
+    borderRadius: AppTheme.radius.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  sortText: { fontSize: 15, color: AppTheme.colors.text, fontFamily: Fonts.rounded, fontWeight: "600" },
   emptyText: {
-    color: "#999",
+    color: AppTheme.colors.muted,
     fontSize: 16,
     textAlign: "center",
     marginTop: 40,
+    fontFamily: Fonts.rounded,
   },
   itemList: { gap: 12 },
   itemCard: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 10,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: "#000",
-    backgroundColor: "white",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    elevation: 2,
+    padding: 12,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: AppTheme.colors.line,
+    backgroundColor: AppTheme.colors.surface,
+    shadowColor: "#e4d2c7",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    elevation: 5,
   },
   itemImageWrap: { marginRight: 12 },
-  itemImage: { width: 52, height: 52, borderRadius: 4 },
+  itemImage: { width: 56, height: 56, borderRadius: 18 },
   itemImagePlaceholder: {
-    width: 52,
-    height: 52,
-    backgroundColor: "#d9d9d9",
-    borderRadius: 4,
+    width: 56,
+    height: 56,
+    backgroundColor: AppTheme.colors.surfaceAlt,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
   },
   itemInfo: { flex: 1, gap: 4 },
-  itemName: { fontSize: 16, fontWeight: "500" },
+  itemName: { fontSize: 17, fontWeight: "700", fontFamily: Fonts.rounded, color: AppTheme.colors.text },
   expBadge: {
     borderRadius: 5,
     paddingHorizontal: 6,
     paddingVertical: 1,
     alignSelf: "flex-start",
   },
-  expText: { fontSize: 9, fontWeight: "700" },
+  expText: { fontSize: 10, fontWeight: "700", fontFamily: Fonts.rounded, color: AppTheme.colors.text },
   ownerBadge: {
     borderRadius: 5,
     paddingHorizontal: 6,
     paddingVertical: 1,
     alignSelf: "flex-start",
   },
-  ownerText: { fontSize: 9, fontWeight: "400" },
+  ownerText: { fontSize: 10, fontWeight: "600", fontFamily: Fonts.rounded, color: AppTheme.colors.text },
   itemQty: { flexDirection: "row", alignItems: "center", gap: 6 },
   qtyBtn: { padding: 2 },
   qtyCircle: {
-    width: 26,
-    height: 25,
-    borderRadius: 13,
-    borderWidth: 1.5,
-    borderColor: "#70ab25",
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 2,
+    borderColor: AppTheme.colors.line,
+    backgroundColor: AppTheme.colors.cardMint,
     alignItems: "center",
     justifyContent: "center",
   },
-  qtySymbol: { fontSize: 16, color: "#70ab25", fontWeight: "600" },
+  qtySymbol: { fontSize: 16, color: AppTheme.colors.text, fontWeight: "700", fontFamily: Fonts.rounded },
   qtyValue: {
     fontSize: 20,
-    fontWeight: "500",
+    fontWeight: "700",
+    fontFamily: Fonts.rounded,
     minWidth: 20,
     textAlign: "center",
+    color: AppTheme.colors.text,
   },
 });

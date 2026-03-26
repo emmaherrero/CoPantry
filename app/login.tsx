@@ -5,11 +5,13 @@ import Input from "../components/Input";
 import Button from "../components/Button";
 import { supabase } from "../lib/supabase";
 import { showAlert } from "../lib/alert";
+import { AppTheme, Fonts } from "../constants/theme";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const canGoBack = router.canGoBack();
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -46,9 +48,13 @@ export default function Login() {
 
   return (
     <View style={styles.container}>
-      <Pressable onPress={() => router.back()} style={styles.back}>
-        <Text style={styles.arrow}>{"<"}</Text>
-      </Pressable>
+      {canGoBack ? (
+        <Pressable onPress={() => router.back()} style={styles.back}>
+          <Text style={styles.arrow}>{"<"}</Text>
+        </Pressable>
+      ) : (
+        <View style={styles.back} />
+      )}
 
       <Text style={styles.h1}>Log in</Text>
 
@@ -68,13 +74,13 @@ export default function Login() {
       </View>
 
       <Button
-        title={loading ? "Logging in\u2026" : "Log in"}
+        title={loading ? "Logging in..." : "Log in"}
         onPress={handleLogin}
         disabled={loading}
       />
 
       <View style={styles.row}>
-        <Text style={styles.muted}>Don\u2019t have an account? </Text>
+        <Text style={styles.muted}>Don{"'"}t have an account? </Text>
         <Pressable onPress={() => router.push("/create-account")}>
           <Text style={styles.link}>Create account</Text>
         </Pressable>
@@ -86,19 +92,19 @@ export default function Login() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "white",
+    backgroundColor: AppTheme.colors.page,
     paddingTop: 60,
     paddingHorizontal: 28,
   },
   back: { width: 44, height: 44, justifyContent: "center" },
-  arrow: { fontSize: 24, fontWeight: "700" },
-  h1: { fontSize: 41, fontWeight: "700", marginTop: 16 },
+  arrow: { fontSize: 24, fontWeight: "700", color: AppTheme.colors.text },
+  h1: { fontSize: 41, fontWeight: "800", marginTop: 16, fontFamily: Fonts.rounded, color: AppTheme.colors.text },
   form: { gap: 20, marginTop: 50 },
   row: {
     flexDirection: "row",
     marginTop: 20,
     justifyContent: "center",
   },
-  muted: { color: "#000", fontSize: 18 },
-  link: { color: "#000", fontWeight: "700", fontSize: 18, textDecorationLine: "underline" },
+  muted: { color: AppTheme.colors.muted, fontSize: 18, fontFamily: Fonts.rounded },
+  link: { color: AppTheme.colors.accentDark, fontWeight: "700", fontSize: 18, textDecorationLine: "underline", fontFamily: Fonts.rounded },
 });

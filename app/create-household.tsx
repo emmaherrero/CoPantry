@@ -6,6 +6,7 @@ import Button from "../components/Button";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth-context";
 import { showAlert } from "../lib/alert";
+import { AppTheme, Fonts } from "../constants/theme";
 
 export default function CreateHousehold() {
   const { session } = useAuth();
@@ -73,7 +74,7 @@ export default function CreateHousehold() {
           onPress={() => setMemberCount(Math.max(1, memberCount - 1))}
         >
           <View style={styles.counterCircle}>
-            <Text style={styles.counterSymbol}>{"\u2212"}</Text>
+            <Text style={styles.counterSymbol}>-</Text>
           </View>
         </Pressable>
 
@@ -91,7 +92,7 @@ export default function CreateHousehold() {
 
       <Button
         variant="pill"
-        title={loading ? "Creating\u2026" : "Enter"}
+        title={loading ? "Creating..." : "Enter"}
         onPress={handleCreate}
         disabled={loading}
         style={styles.enterBtn}
@@ -103,27 +104,27 @@ export default function CreateHousehold() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "white",
+    backgroundColor: AppTheme.colors.page,
     paddingTop: 60,
     paddingHorizontal: 28,
   },
   back: { width: 44, height: 44, justifyContent: "center" },
-  arrow: { fontSize: 24, fontWeight: "700" },
-  h1: { fontSize: 41, fontWeight: "700", marginTop: 16, marginBottom: 40 },
+  arrow: { fontSize: 24, fontWeight: "700", color: AppTheme.colors.text },
+  h1: { fontSize: 41, fontWeight: "800", marginTop: 16, marginBottom: 40, fontFamily: Fonts.rounded, color: AppTheme.colors.text },
   counterCard: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     padding: 30,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: "#000",
-    backgroundColor: "white",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    elevation: 2,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: AppTheme.colors.line,
+    backgroundColor: AppTheme.colors.surface,
+    shadowColor: "#b7d4f5",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.16,
+    shadowRadius: 16,
+    elevation: 5,
     marginTop: 30,
   },
   counterBtn: { padding: 8 },
@@ -132,12 +133,13 @@ const styles = StyleSheet.create({
     height: 39,
     borderRadius: 20,
     borderWidth: 2,
-    borderColor: "#70ab25",
+    borderColor: AppTheme.colors.line,
+    backgroundColor: AppTheme.colors.surfaceAlt,
     alignItems: "center",
     justifyContent: "center",
   },
   counterCirclePlus: {},
-  counterSymbol: { fontSize: 22, fontWeight: "600", color: "#70ab25" },
-  counterValue: { fontSize: 32, fontWeight: "500", marginHorizontal: 30 },
+  counterSymbol: { fontSize: 22, fontWeight: "700", color: AppTheme.colors.text, fontFamily: Fonts.rounded },
+  counterValue: { fontSize: 32, fontWeight: "700", marginHorizontal: 30, color: AppTheme.colors.text, fontFamily: Fonts.rounded },
   enterBtn: { marginTop: 60 },
 });

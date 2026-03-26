@@ -11,23 +11,36 @@ import Button from "../components/Button";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth-context";
 import { showAlert } from "../lib/alert";
+import { AppTheme, Fonts } from "../constants/theme";
 
 export default function JoinHousehold() {
   const { session } = useAuth();
-  const [code, setCode] = useState(["", "", "", ""]);
+  const [code, setCode] = useState(Array.from({ length: 8 }, () => ""));
   const [loading, setLoading] = useState(false);
   const inputs = useRef<(TextInput | null)[]>([]);
 
   const handleCodeChange = (value: string, index: number) => {
     const newCode = [...code];
-    // Take only last character if user types multiple
-    const char = value.slice(-1);
-    newCode[index] = char;
+    const sanitized = value.replace(/\s/g, "").toLowerCase();
+
+    if (!sanitized) {
+      newCode[index] = "";
+      setCode(newCode);
+      return;
+    }
+
+    const chars = sanitized.split("");
+    chars.forEach((char, offset) => {
+      const targetIndex = index + offset;
+      if (targetIndex < newCode.length) {
+        newCode[targetIndex] = char;
+      }
+    });
     setCode(newCode);
 
-    // Auto-advance to next input
-    if (char && index < 3) {
-      inputs.current[index + 1]?.focus();
+    const nextIndex = Math.min(index + chars.length, newCode.length - 1);
+    if (nextIndex < newCode.length) {
+      inputs.current[nextIndex]?.focus();
     }
   };
 
@@ -38,8 +51,8 @@ export default function JoinHousehold() {
   };
 
   const handleJoin = async () => {
-    const inviteCode = code.join("").trim();
-    if (inviteCode.length < 4) {
+    const inviteCode = code.join("").trim().toLowerCase();
+    if (inviteCode.length < code.length) {
       showAlert("Missing code", "Please enter the full invite code.");
       return;
     }
@@ -92,7 +105,7 @@ export default function JoinHousehold() {
               onChangeText={(v) => handleCodeChange(v, i)}
               onKeyPress={({ nativeEvent }) => handleKeyPress(nativeEvent.key, i)}
               keyboardType="default"
-              maxLength={2}
+              maxLength={8}
               autoCapitalize="none"
               autoCorrect={false}
               textAlign="center"
@@ -102,12 +115,12 @@ export default function JoinHousehold() {
       </View>
 
       <Text style={styles.helper}>
-        Your housemate can find this code under {"\u201C"}household.{"\u201D"}
+        Enter the full 8-character code from your housemate.
       </Text>
 
       <Button
         variant="pill"
-        title={loading ? "Joining\u2026" : "Enter"}
+        title={loading ? "Joining..." : "Enter"}
         onPress={handleJoin}
         disabled={loading}
         style={styles.enterBtn}
@@ -119,45 +132,50 @@ export default function JoinHousehold() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "white",
+    backgroundColor: AppTheme.colors.page,
     paddingTop: 60,
     paddingHorizontal: 28,
   },
   back: { width: 44, height: 44, justifyContent: "center" },
-  arrow: { fontSize: 24, fontWeight: "700" },
-  h1: { fontSize: 41, fontWeight: "700", marginTop: 16, marginBottom: 40 },
+  arrow: { fontSize: 24, fontWeight: "700", color: AppTheme.colors.text },
+  h1: { fontSize: 41, fontWeight: "800", marginTop: 16, marginBottom: 40, fontFamily: Fonts.rounded, color: AppTheme.colors.text },
   codeCard: {
     padding: 20,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: "#000",
-    backgroundColor: "white",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    elevation: 2,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: AppTheme.colors.line,
+    backgroundColor: AppTheme.colors.surface,
+    shadowColor: "#b7d4f5",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.16,
+    shadowRadius: 16,
+    elevation: 5,
   },
   codeRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 16,
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 12,
   },
   codeBox: {
-    flex: 1,
+    width: 58,
     height: 71,
-    backgroundColor: "#d9d9d9",
-    borderRadius: 5,
+    backgroundColor: AppTheme.colors.surfaceAlt,
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: AppTheme.colors.line,
     fontSize: 32,
     fontWeight: "700",
+    fontFamily: Fonts.rounded,
     textAlign: "center",
-    color: "#000",
+    color: AppTheme.colors.text,
   },
   helper: {
     marginTop: 20,
     fontSize: 15,
-    color: "#000",
+    color: AppTheme.colors.muted,
     lineHeight: 22,
+    fontFamily: Fonts.rounded,
   },
   enterBtn: { marginTop: 60 },
 });

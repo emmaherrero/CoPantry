@@ -6,7 +6,6 @@ import {
   ScrollView,
   Pressable,
   Switch,
-  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -14,6 +13,7 @@ import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth-context";
 import { useHousehold } from "../../lib/household-context";
 import Button from "../../components/Button";
+import { AppTheme, Fonts } from "../../constants/theme";
 
 export default function Profile() {
   const { session } = useAuth();
@@ -136,53 +136,60 @@ export default function Profile() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "white" },
+  container: { flex: 1, backgroundColor: AppTheme.colors.page },
   scroll: { paddingTop: 60, paddingHorizontal: 28, paddingBottom: 40 },
   avatarWrap: { alignItems: "center", marginBottom: 12 },
   avatar: {
     width: 93,
     height: 93,
     borderRadius: 47,
-    backgroundColor: "#d9d9d9",
+    backgroundColor: AppTheme.colors.surfaceAlt,
+    borderWidth: 2,
+    borderColor: AppTheme.colors.line,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
   },
   name: {
     fontSize: 32,
-    fontWeight: "600",
+    fontWeight: "800",
+    fontFamily: Fonts.rounded,
     textAlign: "center",
+    color: AppTheme.colors.text,
   },
   email: {
     fontSize: 18,
-    color: "#000",
+    color: AppTheme.colors.muted,
+    fontFamily: Fonts.rounded,
     textAlign: "center",
     marginTop: 4,
     marginBottom: 20,
   },
   card: {
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: "#000",
-    backgroundColor: "white",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    elevation: 2,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: AppTheme.colors.line,
+    backgroundColor: AppTheme.colors.surface,
+    shadowColor: "#b7d4f5",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.16,
+    shadowRadius: 16,
+    elevation: 5,
     marginBottom: 16,
     overflow: "hidden",
   },
   cardHeader: {
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "700",
+    fontFamily: Fonts.rounded,
+    color: AppTheme.colors.text,
     paddingHorizontal: 18,
     paddingTop: 14,
     paddingBottom: 10,
   },
   divider: {
     height: 1,
-    backgroundColor: "#000",
+    backgroundColor: AppTheme.colors.accentSoft,
     marginHorizontal: 18,
   },
   cardRow: {
@@ -192,6 +199,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 12,
   },
-  cardRowText: { fontSize: 18, flex: 1 },
+  cardRowText: { fontSize: 18, flex: 1, fontFamily: Fonts.rounded, color: AppTheme.colors.text },
   logoutBtn: { marginTop: 20 },
 });

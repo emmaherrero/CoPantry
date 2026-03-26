@@ -13,6 +13,8 @@ type HouseholdState = {
   userProfile: Profile | null;
   loading: boolean;
   refresh: () => Promise<void>;
+  upsertFoodItem: (item: FoodItem) => void;
+  removeFoodItem: (id: string) => void;
 };
 
 const HouseholdContext = createContext<HouseholdState>({
@@ -23,6 +25,8 @@ const HouseholdContext = createContext<HouseholdState>({
   userProfile: null,
   loading: true,
   refresh: async () => {},
+  upsertFoodItem: () => {},
+  removeFoodItem: () => {},
 });
 
 export function HouseholdProvider({ children }: { children: React.ReactNode }) {
@@ -33,6 +37,14 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [userProfile, setUserProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const upsertFoodItem = useCallback((item: FoodItem) => {
+    setFoodItems((prev) => [item, ...prev.filter((existing) => existing.id !== item.id)]);
+  }, []);
+
+  const removeFoodItem = useCallback((id: string) => {
+    setFoodItems((prev) => prev.filter((item) => item.id !== id));
+  }, []);
 
   const fetchData = useCallback(async () => {
     if (!session) return;
@@ -128,7 +140,17 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <HouseholdContext.Provider
-      value={{ household, members, foodItems, recipes, userProfile, loading, refresh: fetchData }}
+      value={{
+        household,
+        members,
+        foodItems,
+        recipes,
+        userProfile,
+        loading,
+        refresh: fetchData,
+        upsertFoodItem,
+        removeFoodItem,
+      }}
     >
       {children}
     </HouseholdContext.Provider>
