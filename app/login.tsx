@@ -57,6 +57,9 @@ export default function Login() {
       )}
 
       <Text style={styles.h1}>Log in</Text>
+      <Text style={styles.subhead}>
+        Keep track of what is yours, what is shared, and what should be used soon.
+      </Text>
 
       <View style={styles.form}>
         <Input
@@ -98,13 +101,21 @@ const styles = StyleSheet.create({
   },
   back: { width: 44, height: 44, justifyContent: "center" },
   arrow: { fontSize: 24, fontWeight: "700", color: AppTheme.colors.text },
-  h1: { fontSize: 41, fontWeight: "800", marginTop: 16, fontFamily: Fonts.rounded, color: AppTheme.colors.text },
-  form: { gap: 20, marginTop: 50 },
+  h1: { fontSize: 40, fontWeight: "800", marginTop: 16, fontFamily: Fonts.sans, color: AppTheme.colors.text, letterSpacing: -0.6 },
+  subhead: {
+    marginTop: 8,
+    fontSize: 16,
+    lineHeight: 24,
+    color: AppTheme.colors.muted,
+    fontFamily: Fonts.sans,
+    maxWidth: 320,
+  },
+  form: { gap: 16, marginTop: 32 },
   row: {
     flexDirection: "row",
     marginTop: 20,
     justifyContent: "center",
   },
-  muted: { color: AppTheme.colors.muted, fontSize: 18, fontFamily: Fonts.rounded },
-  link: { color: AppTheme.colors.accentDark, fontWeight: "700", fontSize: 18, textDecorationLine: "underline", fontFamily: Fonts.rounded },
+  muted: { color: AppTheme.colors.muted, fontSize: 16, fontFamily: Fonts.sans },
+  link: { color: AppTheme.colors.accentDark, fontWeight: "700", fontSize: 16, textDecorationLine: "underline", fontFamily: Fonts.sans },
 });

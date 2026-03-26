@@ -36,21 +36,17 @@ export default function Input({
 
 const styles = StyleSheet.create({
   wrap: {
-    borderWidth: 2,
-    borderColor: AppTheme.colors.line,
+    borderWidth: 1,
+    borderColor: AppTheme.colors.lineStrong,
     borderRadius: AppTheme.radius.md,
     backgroundColor: AppTheme.colors.surface,
-    shadowColor: "#c9b3a6",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.14,
-    shadowRadius: 12,
-    elevation: 4,
+    ...AppTheme.shadow.card,
   },
   input: {
     paddingHorizontal: 16,
-    paddingVertical: 15,
-    fontSize: 18,
-    fontFamily: Fonts.rounded,
+    paddingVertical: 14,
+    fontSize: 16,
+    fontFamily: Fonts.sans,
     fontWeight: "500",
     color: AppTheme.colors.text,
   },

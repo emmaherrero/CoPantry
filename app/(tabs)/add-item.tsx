@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
+  Modal,
   StyleSheet,
   Text,
   View,
@@ -58,6 +59,19 @@ function parseExpirationDate(value: string) {
   return `${yearText}-${monthText}-${dayText}`;
 }
 
+function isExpiredDate(isoDate: string) {
+  const today = new Date();
+  const todayAtMidnight = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate()
+  );
+  const [year, month, day] = isoDate.split("-").map(Number);
+  const expiration = new Date(year, month - 1, day);
+
+  return expiration < todayAtMidnight;
+}
+
 export default function AddItem() {
   const { session } = useAuth();
   const { household, members, upsertFoodItem, removeFoodItem } = useHousehold();
@@ -77,6 +91,7 @@ export default function AddItem() {
     session ? [session.user.id] : []
   );
   const [loading, setLoading] = useState(false);
+  const [showExpiredPopup, setShowExpiredPopup] = useState(false);
   const scanLineProgress = useRef(new Animated.Value(0)).current;
 
   const toggleMember = (userId: string) => {
@@ -178,11 +193,21 @@ export default function AddItem() {
     const addedBy = selectedMembers.length > 0 ? selectedMembers[0] : session!.user.id;
 
     const trimmedProductName = productName.trim();
-    const quantityValue = parseInt(quantity, 10) || 1;
+    const quantityValue = Number(quantity);
     const parsedExpirationDate = parseExpirationDate(expirationDate);
+
+    if (!Number.isInteger(quantityValue) || quantityValue <= 0) {
+      showAlert("Invalid quantity", "Quantity must be 1 or more.");
+      return;
+    }
 
     if (parsedExpirationDate === undefined) {
       showAlert("Invalid date", "Please enter the expiration date as MM/DD/YYYY.");
+      return;
+    }
+
+    if (parsedExpirationDate && isExpiredDate(parsedExpirationDate)) {
+      setShowExpiredPopup(true);
       return;
     }
 
@@ -366,9 +391,9 @@ export default function AddItem() {
             />
             <Input
               placeholder="Quantity"
-              keyboardType="default"
+              keyboardType="numeric"
               value={quantity}
-              onChangeText={setQuantity}
+              onChangeText={(value) => setQuantity(value.replace(/\D/g, ""))}
             />
             <Input
               placeholder="Expiration date (MM/DD/YYYY)"
@@ -443,6 +468,34 @@ export default function AddItem() {
           style={styles.doneBtn}
         />
       </ScrollView>
+
+      <Modal
+        visible={showExpiredPopup}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowExpiredPopup(false)}
+      >
+        <Pressable
+          style={styles.expiredOverlay}
+          onPress={() => setShowExpiredPopup(false)}
+        >
+          <Pressable style={styles.expiredCard} onPress={() => {}}>
+            <View style={styles.expiredIconWrap}>
+              <Ionicons name="alert-circle" size={24} color="#ffffff" />
+            </View>
+            <Text style={styles.expiredTitle}>This item is already expired</Text>
+            <Text style={styles.expiredCopy}>
+              Update the date or leave the expiration field empty before adding it.
+            </Text>
+            <Pressable
+              style={styles.expiredButton}
+              onPress={() => setShowExpiredPopup(false)}
+            >
+              <Text style={styles.expiredButtonText}>Okay</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -452,14 +505,14 @@ const styles = StyleSheet.create({
   scroll: { paddingTop: 60, paddingHorizontal: 28, paddingBottom: 40 },
   back: { width: 44, height: 44, justifyContent: "center" },
   arrow: { fontSize: 24, fontWeight: "700", color: AppTheme.colors.text },
-  title: { fontSize: 34, fontWeight: "800", fontFamily: Fonts.rounded, color: AppTheme.colors.text },
-  toggleLink: { fontSize: 15, color: AppTheme.colors.accentDark, marginTop: 6, marginBottom: 20, fontFamily: Fonts.rounded },
+  title: { fontSize: 36, fontWeight: "800", fontFamily: Fonts.sans, color: AppTheme.colors.text, letterSpacing: -0.5 },
+  toggleLink: { fontSize: 14, color: AppTheme.colors.accentDark, marginTop: 6, marginBottom: 20, fontFamily: Fonts.sans, fontWeight: "600" },
   cameraPlaceholder: {
     height: 374,
     backgroundColor: AppTheme.colors.cardLavender,
     borderRadius: 34,
-    borderWidth: 2,
-    borderColor: AppTheme.colors.line,
+    borderWidth: 1,
+    borderColor: AppTheme.colors.lineStrong,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 20,
@@ -467,8 +520,8 @@ const styles = StyleSheet.create({
   cameraCard: {
     backgroundColor: AppTheme.colors.surface,
     borderRadius: 34,
-    borderWidth: 2,
-    borderColor: AppTheme.colors.line,
+    borderWidth: 1,
+    borderColor: AppTheme.colors.lineStrong,
     overflow: "hidden",
     marginBottom: 20,
   },
@@ -507,9 +560,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.9,
     shadowRadius: 8,
   },
-  cameraText: { color: AppTheme.colors.muted, fontSize: 16, marginTop: 12, fontFamily: Fonts.rounded },
+  cameraText: { color: AppTheme.colors.muted, fontSize: 15, marginTop: 12, fontFamily: Fonts.sans, textAlign: "center", paddingHorizontal: 16 },
   cameraButton: { width: 180, alignSelf: "center" },
-  manualLink: { color: AppTheme.colors.accentDark, fontSize: 15, marginTop: 8, fontFamily: Fonts.rounded },
+  manualLink: { color: AppTheme.colors.accentDark, fontSize: 14, marginTop: 8, fontFamily: Fonts.sans, fontWeight: "600" },
   form: { gap: 16, marginBottom: 20 },
   barcodePill: {
     flexDirection: "row",
@@ -519,50 +572,46 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: AppTheme.colors.surfaceAlt,
     borderRadius: AppTheme.radius.pill,
-    borderWidth: 2,
-    borderColor: AppTheme.colors.line,
+    borderWidth: 1,
+    borderColor: AppTheme.colors.lineStrong,
   },
   barcodeText: {
     flex: 1,
     fontSize: 14,
-    fontFamily: Fonts.rounded,
+    fontFamily: Fonts.sans,
     fontWeight: "700",
     color: AppTheme.colors.text,
   },
   barcodeLink: {
     fontSize: 14,
-    fontFamily: Fonts.rounded,
+    fontFamily: Fonts.sans,
     fontWeight: "700",
     color: AppTheme.colors.accentDark,
   },
-  label: { fontSize: 18, fontWeight: "700", fontFamily: Fonts.rounded, marginTop: 16, marginBottom: 8, color: AppTheme.colors.text },
+  label: { fontSize: 18, fontWeight: "700", fontFamily: Fonts.sans, marginTop: 16, marginBottom: 8, color: AppTheme.colors.text },
   locationRow: { flexDirection: "row", gap: 10 },
   locationBtn: {
     flex: 1,
     paddingVertical: 12,
     borderRadius: AppTheme.radius.md,
-    borderWidth: 2,
-    borderColor: AppTheme.colors.line,
+    borderWidth: 1,
+    borderColor: AppTheme.colors.lineStrong,
     backgroundColor: AppTheme.colors.surface,
     alignItems: "center",
   },
   locationBtnActive: { backgroundColor: AppTheme.colors.cardPeach, borderColor: AppTheme.colors.line },
-  locationText: { fontSize: 15, fontWeight: "700", fontFamily: Fonts.rounded, color: AppTheme.colors.text },
+  locationText: { fontSize: 15, fontWeight: "700", fontFamily: Fonts.sans, color: AppTheme.colors.text },
   locationTextActive: { color: AppTheme.colors.text },
   memberRow: {
     flexDirection: "row",
     alignItems: "center",
     padding: 12,
-    borderRadius: 22,
-    borderWidth: 2,
-    borderColor: AppTheme.colors.line,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: AppTheme.colors.lineStrong,
     backgroundColor: AppTheme.colors.surface,
     marginBottom: 10,
-    shadowColor: "#e4d2c7",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.16,
-    shadowRadius: 12,
-    elevation: 5,
+    ...AppTheme.shadow.card,
   },
   memberAvatar: {
     width: 55,
@@ -574,17 +623,76 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   avatarImage: { width: 55, height: 55, borderRadius: 28 },
-  memberName: { flex: 1, fontSize: 18, marginLeft: 12, fontFamily: Fonts.rounded, fontWeight: "700", color: AppTheme.colors.text },
+  memberName: { flex: 1, fontSize: 16, marginLeft: 12, fontFamily: Fonts.sans, fontWeight: "700", color: AppTheme.colors.text },
   checkbox: {
     width: 28,
     height: 28,
     borderRadius: 8,
-    borderWidth: 2,
-    borderColor: AppTheme.colors.line,
+    borderWidth: 1,
+    borderColor: AppTheme.colors.lineStrong,
     backgroundColor: AppTheme.colors.surfaceAlt,
     alignItems: "center",
     justifyContent: "center",
   },
   checkboxActive: { backgroundColor: AppTheme.colors.accent, borderColor: AppTheme.colors.line },
+  expiredOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(116, 16, 30, 0.28)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  expiredCard: {
+    width: "100%",
+    maxWidth: 340,
+    backgroundColor: "#fff4f5",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "#f0a9b0",
+    padding: 22,
+    alignItems: "center",
+    shadowColor: "#cf5f6b",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  expiredIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: AppTheme.colors.red,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14,
+  },
+  expiredTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    fontFamily: Fonts.sans,
+    color: "#8d2634",
+    textAlign: "center",
+  },
+  expiredCopy: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    fontFamily: Fonts.sans,
+    color: "#9c4f59",
+    textAlign: "center",
+  },
+  expiredButton: {
+    marginTop: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: AppTheme.radius.pill,
+    backgroundColor: AppTheme.colors.red,
+  },
+  expiredButtonText: {
+    fontSize: 15,
+    fontWeight: "700",
+    fontFamily: Fonts.sans,
+    color: "#ffffff",
+  },
   doneBtn: { marginTop: 20, width: 158, alignSelf: "center" },
 });

@@ -162,6 +162,11 @@ create policy "Authenticated users can create household"
   to authenticated
   with check (true);
 
+create policy "Members can update household"
+  on public.households for update
+  using (id = public.get_my_household_id())
+  with check (id = public.get_my_household_id());
+
 -- Household members: members see co-members; users can join
 create policy "Members can view co-members"
   on public.household_members for select

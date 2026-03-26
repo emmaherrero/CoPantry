@@ -24,6 +24,12 @@ type GeneratedRecipe = {
   instructions: string[];
 };
 
+type GenerateRecipeOptions = {
+  prioritizeExpiring?: boolean;
+  useMyInventoryOnly?: boolean;
+  keepMealsEasy?: boolean;
+};
+
 const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
 const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
@@ -135,6 +141,10 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
     const householdId = body?.householdId as string | undefined;
+    const options = (body ?? {}) as GenerateRecipeOptions & { householdId?: string };
+    const prioritizeExpiring = options.prioritizeExpiring ?? true;
+    const useMyInventoryOnly = options.useMyInventoryOnly ?? false;
+    const keepMealsEasy = options.keepMealsEasy ?? true;
 
     if (!householdId) {
       return new Response(JSON.stringify({ error: "householdId is required." }), {
@@ -143,11 +153,19 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: items, error: itemsError } = await supabase
+    let itemsQuery = supabase
       .from("food_items")
       .select("id, product_name, quantity, unit, expiration_date, storage_location")
-      .eq("household_id", householdId)
-      .order("expiration_date", { ascending: true, nullsFirst: false });
+      .eq("household_id", householdId);
+
+    if (useMyInventoryOnly) {
+      itemsQuery = itemsQuery.eq("added_by", user.id);
+    }
+
+    const { data: items, error: itemsError } = await itemsQuery.order("expiration_date", {
+      ascending: true,
+      nullsFirst: false,
+    });
 
     if (itemsError) {
       throw itemsError;
@@ -161,13 +179,15 @@ Deno.serve(async (req) => {
     }
 
     const prompt = `
-You are helping college students cook practical meals from the food they already have.
+You are helping people cook practical meals from the food they already have.
 
 Priorities:
-- Prioritize ingredients that expire soon.
+- ${prioritizeExpiring ? "Prioritize ingredients that expire soon." : "You do not need to prioritize ingredients by expiration."}
 - Keep meals simple, realistic, and budget-friendly.
 - Prefer recipes that use multiple available ingredients.
 - Avoid fancy equipment or hard-to-find ingredients.
+- ${useMyInventoryOnly ? "Only use ingredients assigned to the requesting user." : "You may use ingredients from the full shared household inventory."}
+- ${keepMealsEasy ? "Make the recipes especially easy, beginner-friendly, and realistic for people with limited time and common kitchen tools." : "The recipes can be a little more involved if that helps use the available ingredients well."}
 
 Available pantry items:
 ${formatItems(items as FoodItem[])}

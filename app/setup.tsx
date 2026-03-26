@@ -37,6 +37,9 @@ export default function Setup() {
       </Pressable>
 
       <Text style={styles.h1}>Let{"'"}s get{"\n"}set up</Text>
+      <Text style={styles.intro}>
+        Choose how you want to join your shared kitchen space.
+      </Text>
 
       <View style={styles.cards}>
         <Card
@@ -76,22 +79,26 @@ const styles = StyleSheet.create({
   },
   back: { width: 44, height: 44, justifyContent: "center" },
   arrow: { fontSize: 24, fontWeight: "700", color: AppTheme.colors.text },
-  h1: { fontSize: 41, fontWeight: "800", marginTop: 16, marginBottom: 30, fontFamily: Fonts.rounded, color: AppTheme.colors.text },
+  h1: { fontSize: 40, fontWeight: "800", marginTop: 16, marginBottom: 10, fontFamily: Fonts.sans, color: AppTheme.colors.text, letterSpacing: -0.6 },
+  intro: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: AppTheme.colors.muted,
+    fontFamily: Fonts.sans,
+    marginBottom: 24,
+    maxWidth: 320,
+  },
   cards: { gap: 25 },
   card: {
     flexDirection: "row",
     alignItems: "center",
     gap: 16,
     padding: 20,
-    borderRadius: 24,
-    borderWidth: 2,
-    borderColor: AppTheme.colors.line,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: AppTheme.colors.lineStrong,
     backgroundColor: AppTheme.colors.surface,
-    shadowColor: "#b7d4f5",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.16,
-    shadowRadius: 16,
-    elevation: 5,
+    ...AppTheme.shadow.card,
   },
   cardIcon: { width: 41, height: 41, alignItems: "center", justifyContent: "center" },
   houseIconWrap: { position: "relative" },
@@ -102,13 +109,13 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    borderWidth: 2,
-    borderColor: AppTheme.colors.line,
+    borderWidth: 1,
+    borderColor: AppTheme.colors.lineStrong,
     backgroundColor: AppTheme.colors.surfaceAlt,
     alignItems: "center",
     justifyContent: "center",
   },
-  cardTitle: { fontSize: 18, fontWeight: "700", fontFamily: Fonts.rounded, color: AppTheme.colors.text },
-  cardSub: { marginTop: 4, color: AppTheme.colors.muted, fontSize: 15, fontFamily: Fonts.rounded },
-  footer: { marginTop: 25, color: AppTheme.colors.muted, fontSize: 15, lineHeight: 22, fontFamily: Fonts.rounded },
+  cardTitle: { fontSize: 18, fontWeight: "700", fontFamily: Fonts.sans, color: AppTheme.colors.text },
+  cardSub: { marginTop: 4, color: AppTheme.colors.muted, fontSize: 14, fontFamily: Fonts.sans },
+  footer: { marginTop: 24, color: AppTheme.colors.muted, fontSize: 14, lineHeight: 22, fontFamily: Fonts.sans },
 });

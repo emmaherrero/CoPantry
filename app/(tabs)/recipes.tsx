@@ -5,6 +5,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from "react-native";
@@ -23,6 +24,10 @@ export default function Recipes() {
   const { recipes, loading, household, refresh, foodItems } = useHousehold();
   const [generating, setGenerating] = useState(false);
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
+  const [prioritizeExpiring, setPrioritizeExpiring] = useState(true);
+  const [useMyInventoryOnly, setUseMyInventoryOnly] = useState(false);
+  const [keepMealsEasy, setKeepMealsEasy] = useState(true);
+  const [showHelp, setShowHelp] = useState(false);
 
   const handleGenerateRecipes = async () => {
     if (!household?.id) {
@@ -34,7 +39,12 @@ export default function Recipes() {
       setGenerating(true);
 
       const { error } = await supabase.functions.invoke("generate-recipes", {
-        body: { householdId: household.id },
+        body: {
+          householdId: household.id,
+          prioritizeExpiring,
+          useMyInventoryOnly,
+          keepMealsEasy,
+        },
       });
 
       if (error) {
@@ -61,14 +71,70 @@ export default function Recipes() {
       >
         <View style={styles.headerRow}>
           <Text style={styles.title}>Recipes</Text>
-          <View style={styles.headerBadge}>
-            <Ionicons name="sparkles-outline" size={22} color={AppTheme.colors.text} />
-          </View>
+          <Pressable style={styles.headerBadge} onPress={() => setShowHelp(true)}>
+            <Ionicons name="help-circle-outline" size={22} color={AppTheme.colors.text} />
+          </Pressable>
         </View>
 
         <Text style={styles.subtitle}>
           Generate recipe ideas from your pantry with OpenAI.
         </Text>
+
+        <View style={styles.preferenceCard}>
+          <Text style={styles.preferenceTitle}>Recipe settings</Text>
+          <Text style={styles.preferenceCopy}>
+            Adjust how suggestions are generated for this household.
+          </Text>
+
+          <View style={styles.preferenceRow}>
+            <View style={styles.preferenceTextWrap}>
+              <Text style={styles.preferenceLabel}>Prioritize expiring items</Text>
+              <Text style={styles.preferenceHint}>
+                Focus meal ideas on food that should be used up soon.
+              </Text>
+            </View>
+            <Switch
+              value={prioritizeExpiring}
+              onValueChange={setPrioritizeExpiring}
+              trackColor={{ false: AppTheme.colors.surfaceAlt, true: AppTheme.colors.green }}
+              thumbColor="white"
+            />
+          </View>
+
+          <View style={styles.preferenceDivider} />
+
+          <View style={styles.preferenceRow}>
+            <View style={styles.preferenceTextWrap}>
+              <Text style={styles.preferenceLabel}>Use items from my inventory only</Text>
+              <Text style={styles.preferenceHint}>
+                Limit recipe ideas to foods currently assigned to you.
+              </Text>
+            </View>
+            <Switch
+              value={useMyInventoryOnly}
+              onValueChange={setUseMyInventoryOnly}
+              trackColor={{ false: AppTheme.colors.surfaceAlt, true: AppTheme.colors.green }}
+              thumbColor="white"
+            />
+          </View>
+
+          <View style={styles.preferenceDivider} />
+
+          <View style={styles.preferenceRow}>
+            <View style={styles.preferenceTextWrap}>
+              <Text style={styles.preferenceLabel}>Beginner-friendly recipes</Text>
+              <Text style={styles.preferenceHint}>
+                Favor simple meals with common tools, short steps, and low effort cleanup.
+              </Text>
+            </View>
+            <Switch
+              value={keepMealsEasy}
+              onValueChange={setKeepMealsEasy}
+              trackColor={{ false: AppTheme.colors.surfaceAlt, true: AppTheme.colors.green }}
+              thumbColor="white"
+            />
+          </View>
+        </View>
 
         {loading ? (
           <Text style={styles.emptyText}>Loading...</Text>
@@ -117,6 +183,47 @@ export default function Recipes() {
           </Text>
         ) : null}
       </ScrollView>
+
+      <Modal
+        visible={showHelp}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowHelp(false)}
+      >
+        <Pressable style={styles.helpOverlay} onPress={() => setShowHelp(false)}>
+          <Pressable style={styles.helpCard} onPress={() => {}}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>How Recipes Works</Text>
+              <Pressable onPress={() => setShowHelp(false)} style={styles.closeButton}>
+                <Ionicons name="close" size={18} color={AppTheme.colors.text} />
+              </Pressable>
+            </View>
+
+            <Text style={styles.helpBody}>
+              Recipes turns your pantry items into meal ideas you can actually use.
+            </Text>
+            <Text style={styles.helpBullet}>
+              • Prioritize expiring items to use food before it goes bad.
+            </Text>
+            <Text style={styles.helpBullet}>
+              • Use My Inventory Only to generate meals from foods assigned to you.
+            </Text>
+            <Text style={styles.helpBullet}>
+              • Beginner-friendly recipes keeps suggestions simpler and lower effort.
+            </Text>
+            <Text style={styles.helpBullet}>
+              • Tap Generate Recipes to create a fresh batch of meal ideas.
+            </Text>
+            <Text style={styles.helpBullet}>
+              • Tap any recipe card to view ingredients and instructions.
+            </Text>
+
+            <Pressable style={styles.modalButton} onPress={() => setShowHelp(false)}>
+              <Text style={styles.modalButtonText}>Got it</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal
         visible={!!selectedRecipe}
@@ -184,23 +291,94 @@ const styles = StyleSheet.create({
     height: 46,
     borderRadius: 23,
     backgroundColor: AppTheme.colors.cardLavender,
-    borderWidth: 2,
-    borderColor: AppTheme.colors.line,
+    borderWidth: 1,
+    borderColor: AppTheme.colors.lineStrong,
     alignItems: "center",
     justifyContent: "center",
   },
   title: {
     fontSize: 38,
     fontWeight: "800",
-    fontFamily: Fonts.rounded,
+    fontFamily: Fonts.sans,
     color: AppTheme.colors.text,
+    letterSpacing: -0.6,
   },
   subtitle: {
-    fontSize: 18,
+    fontSize: 16,
     color: AppTheme.colors.muted,
-    fontFamily: Fonts.rounded,
+    fontFamily: Fonts.sans,
     marginTop: 8,
-    lineHeight: 26,
+    lineHeight: 24,
+  },
+  preferenceCard: {
+    marginTop: 18,
+    padding: 18,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: AppTheme.colors.lineStrong,
+    backgroundColor: AppTheme.colors.surface,
+    ...AppTheme.shadow.card,
+  },
+  preferenceTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    fontFamily: Fonts.sans,
+    color: AppTheme.colors.text,
+  },
+  preferenceCopy: {
+    marginTop: 6,
+    fontSize: 14,
+    lineHeight: 20,
+    color: AppTheme.colors.muted,
+    fontFamily: Fonts.sans,
+  },
+  preferenceRow: {
+    marginTop: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  preferenceTextWrap: {
+    flex: 1,
+  },
+  preferenceLabel: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: AppTheme.colors.text,
+    fontFamily: Fonts.sans,
+  },
+  preferenceHint: {
+    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 18,
+    color: AppTheme.colors.muted,
+    fontFamily: Fonts.sans,
+  },
+  preferenceDivider: {
+    height: 1,
+    marginTop: 16,
+    backgroundColor: AppTheme.colors.accentSoft,
+  },
+  helpCard: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: AppTheme.colors.surface,
+    borderRadius: 28,
+    borderWidth: 2,
+    borderColor: AppTheme.colors.line,
+    padding: 22,
+    shadowColor: "#7ea9d7",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  helpOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(18, 42, 68, 0.35)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
   },
   emptyState: {
     alignItems: "center",
@@ -209,7 +387,7 @@ const styles = StyleSheet.create({
   emptyText: {
     color: AppTheme.colors.muted,
     fontSize: 16,
-    fontFamily: Fonts.rounded,
+    fontFamily: Fonts.sans,
     textAlign: "center",
     marginTop: 16,
     lineHeight: 24,
@@ -222,21 +400,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     padding: 16,
-    borderRadius: 22,
-    borderWidth: 2,
-    borderColor: AppTheme.colors.line,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: AppTheme.colors.lineStrong,
     backgroundColor: AppTheme.colors.surface,
-    shadowColor: "#b7d4f5",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.16,
-    shadowRadius: 16,
-    elevation: 5,
+    ...AppTheme.shadow.card,
   },
   recipeImageWrap: {
     width: 81,
     height: 81,
     backgroundColor: AppTheme.colors.surfaceAlt,
-    borderRadius: 18,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 16,
@@ -247,19 +421,19 @@ const styles = StyleSheet.create({
   recipeName: {
     fontSize: 24,
     fontWeight: "700",
-    fontFamily: Fonts.rounded,
+    fontFamily: Fonts.sans,
     color: AppTheme.colors.text,
   },
   recipeDetail: {
     fontSize: 14,
     color: AppTheme.colors.accentDark,
-    fontFamily: Fonts.rounded,
+    fontFamily: Fonts.sans,
     marginTop: 4,
   },
   recipeHint: {
     fontSize: 13,
     color: AppTheme.colors.muted,
-    fontFamily: Fonts.rounded,
+    fontFamily: Fonts.sans,
     marginTop: 6,
   },
   generateBtn: {
@@ -273,7 +447,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: AppTheme.colors.muted,
     textAlign: "center",
-    fontFamily: Fonts.rounded,
+    fontFamily: Fonts.sans,
   },
   modalOverlay: {
     flex: 1,
@@ -284,10 +458,25 @@ const styles = StyleSheet.create({
   modalCard: {
     maxHeight: "82%",
     backgroundColor: AppTheme.colors.surface,
-    borderRadius: 28,
-    borderWidth: 2,
-    borderColor: AppTheme.colors.line,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: AppTheme.colors.lineStrong,
     padding: 20,
+    ...AppTheme.shadow.floating,
+  },
+  helpBody: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: AppTheme.colors.text,
+    fontFamily: Fonts.rounded,
+    marginBottom: 10,
+  },
+  helpBullet: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: AppTheme.colors.muted,
+    fontFamily: Fonts.rounded,
+    marginBottom: 8,
   },
   modalHeader: {
     flexDirection: "row",
@@ -300,7 +489,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 26,
     fontWeight: "800",
-    fontFamily: Fonts.rounded,
+    fontFamily: Fonts.sans,
     color: AppTheme.colors.text,
   },
   closeButton: {
@@ -308,21 +497,37 @@ const styles = StyleSheet.create({
     height: 34,
     borderRadius: 17,
     backgroundColor: AppTheme.colors.surfaceAlt,
-    borderWidth: 2,
-    borderColor: AppTheme.colors.line,
+    borderWidth: 1,
+    borderColor: AppTheme.colors.lineStrong,
     alignItems: "center",
     justifyContent: "center",
+  },
+  modalButton: {
+    marginTop: 14,
+    alignSelf: "flex-start",
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: AppTheme.radius.pill,
+    backgroundColor: AppTheme.colors.accent,
+    borderWidth: 2,
+    borderColor: AppTheme.colors.line,
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: "700",
+    fontFamily: Fonts.rounded,
+    color: AppTheme.colors.text,
   },
   modalMeta: {
     fontSize: 14,
     color: AppTheme.colors.accentDark,
-    fontFamily: Fonts.rounded,
+    fontFamily: Fonts.sans,
     marginBottom: 16,
   },
   sectionLabel: {
     fontSize: 18,
     fontWeight: "700",
-    fontFamily: Fonts.rounded,
+    fontFamily: Fonts.sans,
     color: AppTheme.colors.text,
     marginTop: 10,
     marginBottom: 8,
@@ -331,7 +536,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     color: AppTheme.colors.muted,
-    fontFamily: Fonts.rounded,
+    fontFamily: Fonts.sans,
     marginBottom: 8,
   },
 });
