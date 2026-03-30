@@ -15,12 +15,39 @@ export default function CreateHousehold() {
   const [loading, setLoading] = useState(false);
 
   const handleCreate = async () => {
+    if (!session?.user.id) {
+      showAlert("Error", "You need to be signed in to create a household.");
+      return;
+    }
+
     if (!householdName.trim()) {
       showAlert("Missing name", "Give your household a name.");
       return;
     }
 
     setLoading(true);
+
+    const { count: membershipCount, error: membershipLookupError } = await supabase
+      .from("household_members")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", session.user.id)
+      .limit(1);
+
+    if (membershipLookupError) {
+      setLoading(false);
+      showAlert("Error", membershipLookupError.message);
+      return;
+    }
+
+    if ((membershipCount ?? 0) > 0) {
+      setLoading(false);
+      showAlert(
+        "Already in a household",
+        "Leave your current household before creating a new one.",
+      );
+      return;
+    }
+
     const { data: household, error } = await supabase
       .from("households")
       .insert({ name: householdName.trim() })
@@ -35,7 +62,7 @@ export default function CreateHousehold() {
 
     const { error: memberError } = await supabase.from("household_members").insert({
       household_id: household.id,
-      user_id: session!.user.id,
+      user_id: session.user.id,
       role: "owner",
     });
 

@@ -1,30 +1,32 @@
+import { Ionicons } from "@expo/vector-icons";
+import { CameraView, useCameraPermissions } from "expo-camera";
+import * as Haptics from "expo-haptics";
+import { router, useFocusEffect } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
+  Image,
   Modal,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
-  ScrollView,
-  Pressable,
-  Image,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import { CameraView, useCameraPermissions } from "expo-camera";
-import * as Haptics from "expo-haptics";
-import Input from "../../components/Input";
 import Button from "../../components/Button";
-import { supabase } from "../../lib/supabase";
+import Input from "../../components/Input";
+import { AppTheme, Fonts } from "../../constants/theme";
+import { showAlert } from "../../lib/alert";
 import { useAuth } from "../../lib/auth-context";
 import { useHousehold } from "../../lib/household-context";
-import { showAlert } from "../../lib/alert";
-import { AppTheme, Fonts } from "../../constants/theme";
+import { supabase } from "../../lib/supabase";
 
 type OpenFoodFactsResponse = {
   product?: {
     product_name?: string;
     brands?: string;
+    image_front_url?: string;
+    image_url?: string;
   };
 };
 
@@ -64,7 +66,7 @@ function isExpiredDate(isoDate: string) {
   const todayAtMidnight = new Date(
     today.getFullYear(),
     today.getMonth(),
-    today.getDate()
+    today.getDate(),
   );
   const [year, month, day] = isoDate.split("-").map(Number);
   const expiration = new Date(year, month - 1, day);
@@ -82,29 +84,38 @@ export default function AddItem() {
   const [quantity, setQuantity] = useState("1");
   const [expirationDate, setExpirationDate] = useState("");
   const [barcode, setBarcode] = useState("");
-  const [scanMessage, setScanMessage] = useState("Point your camera at a barcode to scan.");
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [scanMessage, setScanMessage] = useState(
+    "Point your camera at a barcode to scan.",
+  );
   const [isScanningBarcode, setIsScanningBarcode] = useState(false);
   const [storageLocation, setStorageLocation] = useState<
     "fridge" | "freezer" | "pantry"
   >("fridge");
   const [selectedMembers, setSelectedMembers] = useState<string[]>(
-    session ? [session.user.id] : []
+    session ? [session.user.id] : [],
   );
   const [loading, setLoading] = useState(false);
   const [showExpiredPopup, setShowExpiredPopup] = useState(false);
   const scanLineProgress = useRef(new Animated.Value(0)).current;
 
+  useFocusEffect(
+    React.useCallback(() => {
+      setMode("scan");
+    }, []),
+  );
+
   const toggleMember = (userId: string) => {
     setSelectedMembers((prev) =>
       prev.includes(userId)
         ? prev.filter((id) => id !== userId)
-        : [...prev, userId]
+        : [...prev, userId],
     );
   };
 
   const lookupBarcode = async (code: string) => {
     const response = await fetch(
-      `https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,brands`
+      `https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,brands,image_front_url,image_url`,
     );
 
     if (!response.ok) {
@@ -119,6 +130,7 @@ export default function AddItem() {
 
     setIsScanningBarcode(true);
     setBarcode(data);
+    setImageUrl(null);
     setScanMessage(`Scanned ${data}. Looking up product details...`);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
@@ -126,6 +138,10 @@ export default function AddItem() {
       const result = await lookupBarcode(data);
       const scannedProductName = result.product?.product_name?.trim();
       const scannedBrand = result.product?.brands?.trim();
+      const scannedImageUrl =
+        result.product?.image_front_url?.trim() ||
+        result.product?.image_url?.trim() ||
+        null;
 
       if (scannedProductName) {
         setProductName(scannedProductName);
@@ -135,10 +151,12 @@ export default function AddItem() {
         setBrand(scannedBrand);
       }
 
+      setImageUrl(scannedImageUrl);
+
       setScanMessage(
         scannedProductName
           ? `Found ${scannedProductName}. Finish adding it below.`
-          : "Barcode captured. Fill in any missing details below."
+          : "Barcode captured. Fill in any missing details below.",
       );
     } catch {
       setScanMessage("Barcode captured. Fill in the item details manually.");
@@ -167,7 +185,7 @@ export default function AddItem() {
           duration: 1800,
           useNativeDriver: true,
         }),
-      ])
+      ]),
     );
 
     animation.start();
@@ -190,7 +208,8 @@ export default function AddItem() {
     }
 
     // Add item for each selected member
-    const addedBy = selectedMembers.length > 0 ? selectedMembers[0] : session!.user.id;
+    const addedBy =
+      selectedMembers.length > 0 ? selectedMembers[0] : session!.user.id;
 
     const trimmedProductName = productName.trim();
     const quantityValue = Number(quantity);
@@ -201,8 +220,16 @@ export default function AddItem() {
       return;
     }
 
+    if (parsedExpirationDate === null) {
+      showAlert("Missing date", "Please enter the expiration date.");
+      return;
+    }
+
     if (parsedExpirationDate === undefined) {
-      showAlert("Invalid date", "Please enter the expiration date as MM/DD/YYYY.");
+      showAlert(
+        "Invalid date",
+        "Please enter the expiration date as MM/DD/YYYY.",
+      );
       return;
     }
 
@@ -219,7 +246,7 @@ export default function AddItem() {
       barcode: barcode || null,
       product_name: trimmedProductName,
       brand: brand.trim() || null,
-      image_url: null,
+      image_url: imageUrl,
       nutrition_json: null,
       quantity: quantityValue,
       unit: "unit",
@@ -239,6 +266,7 @@ export default function AddItem() {
     setQuantity("1");
     setExpirationDate("");
     setBarcode("");
+    setImageUrl(null);
     setScanMessage("Point your camera at a barcode to scan.");
     setStorageLocation("fridge");
     setLoading(false);
@@ -251,6 +279,7 @@ export default function AddItem() {
         barcode: barcode || null,
         product_name: trimmedProductName,
         brand: brand.trim() || null,
+        image_url: imageUrl,
         quantity: quantityValue,
         expiration_date: parsedExpirationDate,
         storage_location: storageLocation,
@@ -294,7 +323,9 @@ export default function AddItem() {
         {mode === "scan" ? (
           !cameraPermission ? (
             <View style={styles.cameraPlaceholder}>
-              <Text style={styles.cameraText}>Checking camera permission...</Text>
+              <Text style={styles.cameraText}>
+                Checking camera permission...
+              </Text>
             </View>
           ) : !cameraPermission.granted ? (
             <View style={styles.cameraPlaceholder}>
@@ -399,7 +430,9 @@ export default function AddItem() {
               placeholder="Expiration date (MM/DD/YYYY)"
               keyboardType="numeric"
               value={expirationDate}
-              onChangeText={(value) => setExpirationDate(formatExpirationInput(value))}
+              onChangeText={(value) =>
+                setExpirationDate(formatExpirationInput(value))
+              }
             />
 
             <Text style={styles.label}>Storage location</Text>
@@ -451,7 +484,8 @@ export default function AddItem() {
             <View
               style={[
                 styles.checkbox,
-                selectedMembers.includes(member.user_id) && styles.checkboxActive,
+                selectedMembers.includes(member.user_id) &&
+                  styles.checkboxActive,
               ]}
             >
               {selectedMembers.includes(member.user_id) && (
@@ -464,7 +498,7 @@ export default function AddItem() {
         <Button
           title={loading ? "Adding..." : "Done"}
           onPress={handleDone}
-          disabled={loading}
+          disabled={loading || !expirationDate.trim()}
           style={styles.doneBtn}
         />
       </ScrollView>
@@ -483,9 +517,11 @@ export default function AddItem() {
             <View style={styles.expiredIconWrap}>
               <Ionicons name="alert-circle" size={24} color="#ffffff" />
             </View>
-            <Text style={styles.expiredTitle}>This item is already expired</Text>
+            <Text style={styles.expiredTitle}>
+              This item is already expired
+            </Text>
             <Text style={styles.expiredCopy}>
-              Update the date or leave the expiration field empty before adding it.
+              Update the date before adding it.
             </Text>
             <Pressable
               style={styles.expiredButton}
@@ -505,8 +541,21 @@ const styles = StyleSheet.create({
   scroll: { paddingTop: 60, paddingHorizontal: 28, paddingBottom: 40 },
   back: { width: 44, height: 44, justifyContent: "center" },
   arrow: { fontSize: 24, fontWeight: "700", color: AppTheme.colors.text },
-  title: { fontSize: 36, fontWeight: "800", fontFamily: Fonts.sans, color: AppTheme.colors.text, letterSpacing: -0.5 },
-  toggleLink: { fontSize: 14, color: AppTheme.colors.accentDark, marginTop: 6, marginBottom: 20, fontFamily: Fonts.sans, fontWeight: "600" },
+  title: {
+    fontSize: 36,
+    fontWeight: "800",
+    fontFamily: Fonts.sans,
+    color: AppTheme.colors.text,
+    letterSpacing: -0.5,
+  },
+  toggleLink: {
+    fontSize: 14,
+    color: AppTheme.colors.accentDark,
+    marginTop: 6,
+    marginBottom: 20,
+    fontFamily: Fonts.sans,
+    fontWeight: "600",
+  },
   cameraPlaceholder: {
     height: 374,
     backgroundColor: AppTheme.colors.cardLavender,
@@ -524,6 +573,7 @@ const styles = StyleSheet.create({
     borderColor: AppTheme.colors.lineStrong,
     overflow: "hidden",
     marginBottom: 20,
+    paddingBottom: 16,
   },
   cameraPreview: {
     width: "100%",
@@ -560,9 +610,24 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.9,
     shadowRadius: 8,
   },
-  cameraText: { color: AppTheme.colors.muted, fontSize: 15, marginTop: 12, fontFamily: Fonts.sans, textAlign: "center", paddingHorizontal: 16 },
+  cameraText: {
+    color: AppTheme.colors.muted,
+    fontSize: 15,
+    marginTop: 12,
+    fontFamily: Fonts.sans,
+    textAlign: "center",
+    paddingHorizontal: 16,
+  },
   cameraButton: { width: 180, alignSelf: "center" },
-  manualLink: { color: AppTheme.colors.accentDark, fontSize: 14, marginTop: 8, fontFamily: Fonts.sans, fontWeight: "600" },
+  manualLink: {
+    color: AppTheme.colors.accentDark,
+    fontSize: 14,
+    marginTop: 8,
+    fontFamily: Fonts.sans,
+    fontWeight: "600",
+    textAlign: "center",
+    alignSelf: "center",
+  },
   form: { gap: 16, marginBottom: 20 },
   barcodePill: {
     flexDirection: "row",
@@ -588,7 +653,14 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: AppTheme.colors.accentDark,
   },
-  label: { fontSize: 18, fontWeight: "700", fontFamily: Fonts.sans, marginTop: 16, marginBottom: 8, color: AppTheme.colors.text },
+  label: {
+    fontSize: 18,
+    fontWeight: "700",
+    fontFamily: Fonts.sans,
+    marginTop: 16,
+    marginBottom: 8,
+    color: AppTheme.colors.text,
+  },
   locationRow: { flexDirection: "row", gap: 10 },
   locationBtn: {
     flex: 1,
@@ -599,8 +671,16 @@ const styles = StyleSheet.create({
     backgroundColor: AppTheme.colors.surface,
     alignItems: "center",
   },
-  locationBtnActive: { backgroundColor: AppTheme.colors.cardPeach, borderColor: AppTheme.colors.line },
-  locationText: { fontSize: 15, fontWeight: "700", fontFamily: Fonts.sans, color: AppTheme.colors.text },
+  locationBtnActive: {
+    backgroundColor: AppTheme.colors.cardPeach,
+    borderColor: AppTheme.colors.line,
+  },
+  locationText: {
+    fontSize: 15,
+    fontWeight: "700",
+    fontFamily: Fonts.sans,
+    color: AppTheme.colors.text,
+  },
   locationTextActive: { color: AppTheme.colors.text },
   memberRow: {
     flexDirection: "row",
@@ -623,7 +703,14 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   avatarImage: { width: 55, height: 55, borderRadius: 28 },
-  memberName: { flex: 1, fontSize: 16, marginLeft: 12, fontFamily: Fonts.sans, fontWeight: "700", color: AppTheme.colors.text },
+  memberName: {
+    flex: 1,
+    fontSize: 16,
+    marginLeft: 12,
+    fontFamily: Fonts.sans,
+    fontWeight: "700",
+    color: AppTheme.colors.text,
+  },
   checkbox: {
     width: 28,
     height: 28,
@@ -634,7 +721,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  checkboxActive: { backgroundColor: AppTheme.colors.accent, borderColor: AppTheme.colors.line },
+  checkboxActive: {
+    backgroundColor: AppTheme.colors.accent,
+    borderColor: AppTheme.colors.line,
+  },
   expiredOverlay: {
     flex: 1,
     backgroundColor: "rgba(116, 16, 30, 0.28)",

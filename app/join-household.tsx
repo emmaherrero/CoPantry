@@ -51,6 +51,11 @@ export default function JoinHousehold() {
   };
 
   const handleJoin = async () => {
+    if (!session?.user.id) {
+      showAlert("Error", "You need to be signed in to join a household.");
+      return;
+    }
+
     const inviteCode = code.join("").trim().toLowerCase();
     if (inviteCode.length < code.length) {
       showAlert("Missing code", "Please enter the full invite code.");
@@ -58,9 +63,31 @@ export default function JoinHousehold() {
     }
 
     setLoading(true);
+
+    const { count: membershipCount, error: membershipLookupError } = await supabase
+      .from("household_members")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", session.user.id)
+      .limit(1);
+
+    if (membershipLookupError) {
+      setLoading(false);
+      showAlert("Error", membershipLookupError.message);
+      return;
+    }
+
+    if ((membershipCount ?? 0) > 0) {
+      setLoading(false);
+      showAlert(
+        "Already in a household",
+        "Leave your current household before joining a different one.",
+      );
+      return;
+    }
+
     const { data: household, error } = await supabase
       .from("households")
-      .select("id")
+      .select("id, name")
       .eq("invite_code", inviteCode)
       .single();
 
@@ -72,7 +99,7 @@ export default function JoinHousehold() {
 
     const { error: memberError } = await supabase.from("household_members").insert({
       household_id: household.id,
-      user_id: session!.user.id,
+      user_id: session.user.id,
       role: "member",
     });
 
@@ -83,7 +110,9 @@ export default function JoinHousehold() {
       return;
     }
 
-    router.replace("/(tabs)/inventory" as any);
+    showAlert("Joined household", `You joined ${household.name}.`, () => {
+      router.replace("/(tabs)/inventory" as any);
+    });
   };
 
   return (

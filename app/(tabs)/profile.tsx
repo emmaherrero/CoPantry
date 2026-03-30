@@ -1,6 +1,12 @@
 import React, { useMemo, useState } from "react";
+import * as ImagePicker from "expo-image-picker";
+import * as Clipboard from "expo-clipboard";
 import {
+  Alert,
+  Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -41,7 +47,8 @@ type ProfileModal =
 
 export default function Profile() {
   const { session } = useAuth();
-  const { userProfile, household, members, refresh } = useHousehold();
+  const { userProfile, household, members, refresh, setHouseholdState, updateProfileState } =
+    useHousehold();
   const [pushNotifications, setPushNotifications] = useState(true);
   const [activeModal, setActiveModal] = useState<ProfileModal>(null);
   const [selectedAllergies, setSelectedAllergies] = useState<string[]>([]);
@@ -64,6 +71,121 @@ export default function Profile() {
     ],
     [otherAllergy, selectedAllergies]
   );
+
+  const saveAvatar = async (avatarUrl: string | null) => {
+    if (!session?.user.id || !userProfile) {
+      showAlert("Error", "You need to be signed in to update your photo.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      const { error } = await supabase
+        .from("profiles")
+        .update({ avatar_url: avatarUrl })
+        .eq("id", session.user.id);
+
+      if (error) {
+        throw error;
+      }
+
+      updateProfileState({ ...userProfile, avatar_url: avatarUrl });
+      showAlert(
+        avatarUrl ? "Photo updated" : "Photo removed",
+        avatarUrl
+          ? "Your profile picture has been updated."
+          : "Your profile picture has been removed.",
+      );
+    } catch (error: any) {
+      showAlert("Could not update photo", error.message ?? "Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const pickAvatar = async (source: "camera" | "library") => {
+    const permission =
+      source === "camera"
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      showAlert(
+        "Permission needed",
+        source === "camera"
+          ? "Camera access is required to take a profile picture."
+          : "Photo library access is required to choose a profile picture.",
+      );
+      return;
+    }
+
+    const result =
+      source === "camera"
+        ? await ImagePicker.launchCameraAsync({
+            mediaTypes: ["images"],
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.5,
+            base64: true,
+          })
+        : await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ["images"],
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.5,
+            base64: true,
+          });
+
+    if (result.canceled) {
+      return;
+    }
+
+    const asset = result.assets[0];
+    if (!asset) {
+      showAlert("Could not update photo", "No image was selected.");
+      return;
+    }
+
+    const mimeType = asset.mimeType || "image/jpeg";
+    const avatarUrl = asset.base64
+      ? `data:${mimeType};base64,${asset.base64}`
+      : asset.uri;
+
+    await saveAvatar(avatarUrl);
+  };
+
+  const handleAvatarPress = () => {
+    Alert.alert("Update profile picture", undefined, [
+      {
+        text: "Take Photo",
+        onPress: () => {
+          void pickAvatar("camera");
+        },
+      },
+      {
+        text: "Choose From Library",
+        onPress: () => {
+          void pickAvatar("library");
+        },
+      },
+      ...(userProfile?.avatar_url
+        ? [
+            {
+              text: "Remove Photo",
+              style: "destructive" as const,
+              onPress: () => {
+                void saveAvatar(null);
+              },
+            },
+          ]
+        : []),
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+    ]);
+  };
 
   const openModal = (modal: Exclude<ProfileModal, null>) => {
     if (modal === "name") {
@@ -99,6 +221,92 @@ export default function Profile() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.replace("/login");
+  };
+
+  const handleLeaveHousehold = () => {
+    if (!session?.user.id || !household?.id) {
+      showAlert("No household", "Join or create a household first.");
+      return;
+    }
+
+    Alert.alert(
+      "Leave household?",
+      "This will delete all items you added to this household and remove you from it.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Leave",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setSaving(true);
+
+              const { error: deleteItemsError } = await supabase
+                .from("food_items")
+                .delete()
+                .eq("household_id", household.id)
+                .eq("added_by", session.user.id);
+
+              if (deleteItemsError) {
+                throw deleteItemsError;
+              }
+
+              const { error: leaveError } = await supabase
+                .from("household_members")
+                .delete()
+                .eq("user_id", session.user.id);
+
+              if (leaveError) {
+                throw leaveError;
+              }
+
+              const { count: remainingMemberships, error: verifyLeaveError } = await supabase
+                .from("household_members")
+                .select("id", { count: "exact", head: true })
+                .eq("user_id", session.user.id)
+                .limit(1);
+
+              if (verifyLeaveError) {
+                throw verifyLeaveError;
+              }
+
+              if ((remainingMemberships ?? 0) > 0) {
+                throw new Error(
+                  "Your household membership still exists in the database. This usually means the live Supabase delete policy has not been applied yet.",
+                );
+              }
+
+              await refresh();
+              router.replace("/setup");
+            } catch (error: any) {
+              showAlert(
+                "Could not leave household",
+                error.message ?? "Please try again after updating your database policies.",
+              );
+            } finally {
+              setSaving(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleCopyHouseholdCode = async () => {
+    if (!household?.invite_code) {
+      showAlert("No code", "There is no household code to copy.");
+      return;
+    }
+
+    try {
+      await Clipboard.setStringAsync(household.invite_code);
+      showAlert("Copied", "Household code copied to clipboard.");
+    } catch (error: any) {
+      showAlert("Could not copy", error.message ?? "Please try again.");
+    }
   };
 
   const handleSaveName = async () => {
@@ -218,16 +426,24 @@ export default function Profile() {
     try {
       setSaving(true);
 
-      const { error } = await supabase
+      const { data: updatedHousehold, error } = await supabase
         .from("households")
         .update({ name: nextName })
-        .eq("id", household.id);
+        .eq("id", household.id)
+        .select("id, name, invite_code, created_at")
+        .maybeSingle();
 
       if (error) {
         throw error;
       }
 
-      await refresh();
+      if (!updatedHousehold || updatedHousehold.name !== nextName) {
+        throw new Error(
+          "The household name did not persist. Check your Supabase update policy for households.",
+        );
+      }
+
+      setHouseholdState(updatedHousehold);
       setActiveModal(null);
       showAlert("Household updated", "Your household name has been changed.");
     } catch (error: any) {
@@ -428,6 +644,11 @@ export default function Profile() {
                 {(household?.invite_code ?? "--------").split("").join(" ")}
               </Text>
             </View>
+            <Button
+              title="Copy code"
+              onPress={handleCopyHouseholdCode}
+              style={styles.modalDoneButton}
+            />
             <Button title="Done" onPress={closeModal} style={styles.modalDoneButton} />
           </>
         );
@@ -440,9 +661,18 @@ export default function Profile() {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.avatarWrap}>
-          <View style={styles.avatar}>
-            <Ionicons name="person" size={48} color={AppTheme.colors.muted} />
-          </View>
+          <Pressable style={styles.avatarButton} onPress={handleAvatarPress}>
+            <View style={styles.avatar}>
+              {userProfile?.avatar_url ? (
+                <Image source={{ uri: userProfile.avatar_url }} style={styles.avatarImage} />
+              ) : (
+                <Ionicons name="person" size={48} color={AppTheme.colors.muted} />
+              )}
+            </View>
+            <View style={styles.avatarBadge}>
+              <Ionicons name="camera-outline" size={16} color={AppTheme.colors.text} />
+            </View>
+          </Pressable>
         </View>
 
         <Text style={styles.name}>{displayName}</Text>
@@ -498,6 +728,18 @@ export default function Profile() {
             </View>
             <Ionicons name="chevron-forward" size={16} color={AppTheme.colors.muted} />
           </Pressable>
+          <View style={styles.divider} />
+
+          <Pressable
+            style={styles.cardRow}
+            onPress={handleLeaveHousehold}
+            disabled={saving}
+          >
+            <Text style={styles.leaveRowText}>
+              {saving ? "Leaving household..." : "Leave household"}
+            </Text>
+            <Ionicons name="exit-outline" size={18} color={AppTheme.colors.red} />
+          </Pressable>
         </View>
 
         <View style={styles.card}>
@@ -550,16 +792,27 @@ export default function Profile() {
         transparent
         onRequestClose={closeModal}
       >
-        <Pressable style={styles.modalOverlay} onPress={closeModal}>
-          <Pressable style={styles.modalCard} onPress={() => {}}>
-            <View style={styles.modalHeader}>
-              <Pressable onPress={closeModal} style={styles.closeButton}>
-                <Ionicons name="close" size={18} color={AppTheme.colors.text} />
-              </Pressable>
-            </View>
-            {renderModalBody()}
+        <KeyboardAvoidingView
+          style={styles.modalKeyboardWrap}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <Pressable style={styles.modalOverlay} onPress={closeModal}>
+            <Pressable style={styles.modalCard} onPress={() => {}}>
+              <ScrollView
+                contentContainerStyle={styles.modalScrollContent}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={styles.modalHeader}>
+                  <Pressable onPress={closeModal} style={styles.closeButton}>
+                    <Ionicons name="close" size={18} color={AppTheme.colors.text} />
+                  </Pressable>
+                </View>
+                {renderModalBody()}
+              </ScrollView>
+            </Pressable>
           </Pressable>
-        </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -569,6 +822,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: AppTheme.colors.page },
   scroll: { paddingTop: 60, paddingHorizontal: 28, paddingBottom: 40 },
   avatarWrap: { alignItems: "center", marginBottom: 12 },
+  avatarButton: {
+    position: "relative",
+  },
   avatar: {
     width: 93,
     height: 93,
@@ -579,6 +835,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
+  },
+  avatarImage: {
+    width: "100%",
+    height: "100%",
+  },
+  avatarBadge: {
+    position: "absolute",
+    right: -2,
+    bottom: -2,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: AppTheme.colors.cardLavender,
+    borderWidth: 1,
+    borderColor: AppTheme.colors.lineStrong,
+    alignItems: "center",
+    justifyContent: "center",
   },
   name: {
     fontSize: 32,
@@ -636,6 +909,12 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.sans,
     color: AppTheme.colors.text,
   },
+  leaveRowText: {
+    flex: 1,
+    fontSize: 16,
+    fontFamily: Fonts.sans,
+    color: AppTheme.colors.red,
+  },
   cardRowSubtext: {
     marginTop: 4,
     fontSize: 13,
@@ -661,6 +940,9 @@ const styles = StyleSheet.create({
     color: AppTheme.colors.muted,
   },
   logoutBtn: { marginTop: 20 },
+  modalKeyboardWrap: {
+    flex: 1,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(18, 42, 68, 0.35)",
@@ -673,7 +955,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: AppTheme.colors.lineStrong,
     padding: 20,
+    maxHeight: "85%",
     ...AppTheme.shadow.floating,
+  },
+  modalScrollContent: {
+    paddingBottom: 12,
   },
   modalHeader: {
     flexDirection: "row",

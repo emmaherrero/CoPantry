@@ -1,37 +1,47 @@
+import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
+  Image,
+  Modal,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
-  ScrollView,
-  Pressable,
-  Image,
-  Modal,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { useHousehold } from "../../lib/household-context";
-import type { FoodItem } from "../../lib/database.types";
-import { supabase } from "../../lib/supabase";
-import { AppTheme, Fonts } from "../../constants/theme";
 import FoodItemEditorModal from "../../components/FoodItemEditorModal";
+import { AppTheme, Fonts } from "../../constants/theme";
 import { showAlert } from "../../lib/alert";
+import type { FoodItem } from "../../lib/database.types";
+import { useHousehold } from "../../lib/household-context";
+import { supabase } from "../../lib/supabase";
 
 function getExpirationInfo(item: FoodItem) {
   if (!item.expiration_date)
-    return { label: "No date", color: AppTheme.colors.surfaceAlt, textColor: AppTheme.colors.text };
+    return {
+      label: "No date",
+      color: AppTheme.colors.surfaceAlt,
+      textColor: AppTheme.colors.text,
+    };
 
   const now = new Date();
-  const exp = new Date(item.expiration_date);
-  const diffMs = exp.getTime() - now.getTime();
+  const todayAtMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const [year, month, day] = item.expiration_date.split("-").map(Number);
+  const exp = new Date(year, month - 1, day);
+  const diffMs = exp.getTime() - todayAtMidnight.getTime();
   const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
-  if (diffDays < 0)
-    return { label: "Expired", color: AppTheme.colors.redSoft, textColor: AppTheme.colors.text };
-  if (diffDays <= 3)
+  if (diffDays <= 0)
+    return {
+      label: "Expired",
+      color: AppTheme.colors.redSoft,
+      textColor: "#ff4d50",
+    };
+  if (diffDays <= 7)
     return {
       label: `${diffDays} day${diffDays !== 1 ? "s" : ""} until expiration`,
       color: AppTheme.colors.orangeSoft,
-      textColor: AppTheme.colors.text,
+      textColor: "#fa9632",
     };
   return {
     label: `${diffDays} days until expiration`,
@@ -158,18 +168,30 @@ function FoodItemCard({
           <Text style={styles.itemName}>{item.product_name}</Text>
           <View style={styles.itemMetaRow}>
             <View style={[styles.expBadge, { backgroundColor: exp.color }]}>
-              <Text style={[styles.expText, { color: exp.textColor }]}>{exp.label}</Text>
+              <Text style={[styles.expText, { color: exp.textColor }]}>
+                {exp.label}
+              </Text>
             </View>
-            <View style={[styles.storageBadge, { backgroundColor: storage.backgroundColor }]}>
+            <View
+              style={[
+                styles.storageBadge,
+                { backgroundColor: storage.backgroundColor },
+              ]}
+            >
               <Ionicons name={storage.icon} size={12} color={storage.color} />
-              <Text style={[styles.storageText, { color: storage.color }]}>{storage.label}</Text>
+              <Text style={[styles.storageText, { color: storage.color }]}>
+                {storage.label}
+              </Text>
             </View>
           </View>
           {ownerName && (
             <View
               style={[
                 styles.ownerBadge,
-                { backgroundColor: MEMBER_COLORS[ownerColorIndex % MEMBER_COLORS.length] },
+                {
+                  backgroundColor:
+                    MEMBER_COLORS[ownerColorIndex % MEMBER_COLORS.length],
+                },
               ]}
             >
               <Text style={styles.ownerText}>{ownerName}</Text>
@@ -196,8 +218,14 @@ function FoodItemCard({
 }
 
 export default function Pantry() {
-  const { household, foodItems, members, loading, upsertFoodItem, removeFoodItem } =
-    useHousehold();
+  const {
+    household,
+    foodItems,
+    members,
+    loading,
+    upsertFoodItem,
+    removeFoodItem,
+  } = useHousehold();
   const [sortOption, setSortOption] = useState<SortOption>("newest");
   const [itemFilter, setItemFilter] = useState<ItemFilter>("all");
   const [storageFilter, setStorageFilter] = useState<StorageFilter>("all");
@@ -231,7 +259,9 @@ export default function Pantry() {
       case "name":
         return a.product_name.localeCompare(b.product_name);
       default:
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        return (
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
     }
   });
   const totalItems = foodItems.reduce((sum, item) => sum + item.quantity, 0);
@@ -263,7 +293,10 @@ export default function Pantry() {
     if (newQty <= 0) {
       removeFoodItem(item.id);
 
-      const { error } = await supabase.from("food_items").delete().eq("id", item.id);
+      const { error } = await supabase
+        .from("food_items")
+        .delete()
+        .eq("id", item.id);
       if (error) {
         upsertFoodItem(previousItem);
       }
@@ -331,13 +364,26 @@ export default function Pantry() {
       >
         <View style={styles.headerRow}>
           <Text style={styles.title}>{household?.name ?? "Pantry"}</Text>
-          <Pressable style={styles.settingsBubble} onPress={() => setShowHelp(true)}>
-            <Ionicons name="help-circle-outline" size={22} color={AppTheme.colors.text} />
+          <Pressable
+            style={styles.settingsBubble}
+            onPress={() => setShowHelp(true)}
+          >
+            <Ionicons
+              name="help-circle-outline"
+              size={22}
+              color={AppTheme.colors.text}
+            />
           </Pressable>
         </View>
+        <Text style={styles.subtitle}>
+          Household code: {household?.invite_code ?? "Unavailable"}
+        </Text>
 
         <View style={styles.stats}>
-          <Pressable style={styles.statPressable} onPress={() => setItemFilter("all")}>
+          <Pressable
+            style={styles.statPressable}
+            onPress={() => setItemFilter("all")}
+          >
             <StatBox
               count={totalItems}
               label="Total Items"
@@ -345,7 +391,10 @@ export default function Pantry() {
               active={itemFilter === "all"}
             />
           </Pressable>
-          <Pressable style={styles.statPressable} onPress={() => setItemFilter("expiring")}>
+          <Pressable
+            style={styles.statPressable}
+            onPress={() => setItemFilter("expiring")}
+          >
             <StatBox
               count={expiring}
               label="Expiring"
@@ -353,7 +402,10 @@ export default function Pantry() {
               active={itemFilter === "expiring"}
             />
           </Pressable>
-          <Pressable style={styles.statPressable} onPress={() => setItemFilter("expired")}>
+          <Pressable
+            style={styles.statPressable}
+            onPress={() => setItemFilter("expired")}
+          >
             <StatBox
               count={expired}
               label="Expired"
@@ -373,10 +425,14 @@ export default function Pantry() {
           </Text>
           <Pressable
             style={styles.sortRow}
-            onPress={() => setSortOption((current) => getNextSortOption(current))}
+            onPress={() =>
+              setSortOption((current) => getNextSortOption(current))
+            }
           >
             <Ionicons name="filter-outline" size={20} color="#000" />
-            <Text style={styles.sortText}>Sort: {getSortLabel(sortOption)}</Text>
+            <Text style={styles.sortText}>
+              Sort: {getSortLabel(sortOption)}
+            </Text>
           </Pressable>
         </View>
 
@@ -453,11 +509,17 @@ export default function Pantry() {
         transparent
         onRequestClose={() => setShowHelp(false)}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => setShowHelp(false)}>
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowHelp(false)}
+        >
           <Pressable style={styles.modalCard} onPress={() => {}}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>How Pantry Works</Text>
-              <Pressable onPress={() => setShowHelp(false)} style={styles.closeButton}>
+              <Pressable
+                onPress={() => setShowHelp(false)}
+                style={styles.closeButton}
+              >
                 <Ionicons name="close" size={18} color={AppTheme.colors.text} />
               </Pressable>
             </View>
@@ -484,13 +546,17 @@ export default function Pantry() {
               • Tap Expiring or Expired at the top to filter the pantry view.
             </Text>
             <Text style={styles.modalBullet}>
-              • Use the fridge, freezer, and pantry chips to filter by where items are stored.
+              • Use the fridge, freezer, and pantry chips to filter by where
+              items are stored.
             </Text>
             <Text style={styles.modalBullet}>
               • Expiration badges show no date, expiring soon, or expired.
             </Text>
 
-            <Pressable style={styles.modalButton} onPress={() => setShowHelp(false)}>
+            <Pressable
+              style={styles.modalButton}
+              onPress={() => setShowHelp(false)}
+            >
               <Text style={styles.modalButtonText}>Got it</Text>
             </Pressable>
           </Pressable>
@@ -518,7 +584,21 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  title: { fontSize: 38, fontWeight: "800", fontFamily: Fonts.sans, color: AppTheme.colors.text, letterSpacing: -0.6 },
+  title: {
+    fontSize: 38,
+    fontWeight: "800",
+    fontFamily: Fonts.sans,
+    color: AppTheme.colors.text,
+    letterSpacing: -0.6,
+  },
+  subtitle: {
+    marginTop: 8,
+    fontSize: 16,
+    lineHeight: 24,
+    color: AppTheme.colors.muted,
+    fontFamily: Fonts.sans,
+    maxWidth: 300,
+  },
   settingsBubble: {
     width: 46,
     height: 46,
@@ -602,8 +682,12 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.rounded,
     color: AppTheme.colors.text,
   },
-  stats: { flexDirection: "row", gap: 12, marginTop: 20 },
-  statPressable: { flex: 1 },
+  stats: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 20,
+  },
+  statPressable: { flex: 1, flexBasis: 0, minWidth: 0 },
   statBox: {
     flex: 1,
     backgroundColor: AppTheme.colors.surface,
@@ -615,7 +699,12 @@ const styles = StyleSheet.create({
     ...AppTheme.shadow.card,
   },
   statCount: { fontSize: 34, fontWeight: "800", fontFamily: Fonts.sans },
-  statLabel: { fontSize: 12, color: AppTheme.colors.muted, marginTop: 4, fontFamily: Fonts.sans },
+  statLabel: {
+    fontSize: 12,
+    color: AppTheme.colors.muted,
+    marginTop: 4,
+    fontFamily: Fonts.sans,
+  },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -623,7 +712,13 @@ const styles = StyleSheet.create({
     marginTop: 30,
     marginBottom: 16,
   },
-  sectionTitle: { fontSize: 28, fontWeight: "800", fontFamily: Fonts.sans, color: AppTheme.colors.text, letterSpacing: -0.4 },
+  sectionTitle: {
+    fontSize: 28,
+    fontWeight: "800",
+    fontFamily: Fonts.sans,
+    color: AppTheme.colors.text,
+    letterSpacing: -0.4,
+  },
   filterMessage: {
     marginTop: -6,
     marginBottom: 16,
@@ -666,7 +761,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  sortText: { fontSize: 14, color: AppTheme.colors.text, fontFamily: Fonts.sans, fontWeight: "600" },
+  sortText: {
+    fontSize: 14,
+    color: AppTheme.colors.text,
+    fontFamily: Fonts.sans,
+    fontWeight: "600",
+  },
   emptyText: {
     color: AppTheme.colors.muted,
     fontSize: 16,
@@ -701,7 +801,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   itemInfo: { flex: 1, gap: 4 },
-  itemName: { fontSize: 16, fontWeight: "700", fontFamily: Fonts.sans, color: AppTheme.colors.text },
+  itemName: {
+    fontSize: 16,
+    fontWeight: "700",
+    fontFamily: Fonts.sans,
+    color: AppTheme.colors.text,
+  },
   itemMetaRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -735,7 +840,12 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     alignSelf: "flex-start",
   },
-  ownerText: { fontSize: 10, fontWeight: "600", fontFamily: Fonts.sans, color: AppTheme.colors.text },
+  ownerText: {
+    fontSize: 10,
+    fontWeight: "600",
+    fontFamily: Fonts.sans,
+    color: AppTheme.colors.text,
+  },
   itemQty: { flexDirection: "row", alignItems: "center", gap: 6 },
   qtyBtn: { padding: 2 },
   qtyCircle: {
@@ -748,7 +858,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  qtySymbol: { fontSize: 16, color: AppTheme.colors.text, fontWeight: "700", fontFamily: Fonts.sans },
+  qtySymbol: {
+    fontSize: 16,
+    color: AppTheme.colors.text,
+    fontWeight: "700",
+    fontFamily: Fonts.sans,
+  },
   qtyValue: {
     fontSize: 20,
     fontWeight: "700",

@@ -10,14 +10,21 @@ import {
   View,
 } from "react-native";
 import Button from "../../components/Button";
+import { AppTheme, Fonts } from "../../constants/theme";
 import { showAlert } from "../../lib/alert";
+import type { Recipe } from "../../lib/database.types";
 import { useHousehold } from "../../lib/household-context";
 import { supabase } from "../../lib/supabase";
-import type { Recipe } from "../../lib/database.types";
-import { AppTheme, Fonts } from "../../constants/theme";
+import {
+  FunctionsFetchError,
+  FunctionsHttpError,
+  FunctionsRelayError,
+} from "@supabase/supabase-js";
 
 function toStringList(value: Recipe["ingredients"] | Recipe["instructions"]) {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }
 
 export default function Recipes() {
@@ -28,6 +35,30 @@ export default function Recipes() {
   const [useMyInventoryOnly, setUseMyInventoryOnly] = useState(false);
   const [keepMealsEasy, setKeepMealsEasy] = useState(true);
   const [showHelp, setShowHelp] = useState(false);
+
+  const getFunctionErrorMessage = async (error: unknown) => {
+    if (error instanceof FunctionsHttpError) {
+      try {
+        const payload = await error.context.json();
+        const message = payload?.error;
+        if (typeof message === "string" && message.trim()) {
+          return message;
+        }
+      } catch {
+        return error.message;
+      }
+    }
+
+    if (error instanceof FunctionsRelayError || error instanceof FunctionsFetchError) {
+      return error.message;
+    }
+
+    if (error instanceof Error) {
+      return error.message;
+    }
+
+    return "Could not generate recipes.";
+  };
 
   const handleGenerateRecipes = async () => {
     if (!household?.id) {
@@ -48,7 +79,7 @@ export default function Recipes() {
       });
 
       if (error) {
-        showAlert("Error", error.message);
+        showAlert("Error", await getFunctionErrorMessage(error));
         return;
       }
 
@@ -71,13 +102,20 @@ export default function Recipes() {
       >
         <View style={styles.headerRow}>
           <Text style={styles.title}>Recipes</Text>
-          <Pressable style={styles.headerBadge} onPress={() => setShowHelp(true)}>
-            <Ionicons name="help-circle-outline" size={22} color={AppTheme.colors.text} />
+          <Pressable
+            style={styles.headerBadge}
+            onPress={() => setShowHelp(true)}
+          >
+            <Ionicons
+              name="help-circle-outline"
+              size={22}
+              color={AppTheme.colors.text}
+            />
           </Pressable>
         </View>
 
         <Text style={styles.subtitle}>
-          Generate recipe ideas from your pantry with OpenAI.
+          Generate recipe ideas using your pantry.
         </Text>
 
         <View style={styles.preferenceCard}>
@@ -88,7 +126,9 @@ export default function Recipes() {
 
           <View style={styles.preferenceRow}>
             <View style={styles.preferenceTextWrap}>
-              <Text style={styles.preferenceLabel}>Prioritize expiring items</Text>
+              <Text style={styles.preferenceLabel}>
+                Prioritize expiring items
+              </Text>
               <Text style={styles.preferenceHint}>
                 Focus meal ideas on food that should be used up soon.
               </Text>
@@ -96,7 +136,10 @@ export default function Recipes() {
             <Switch
               value={prioritizeExpiring}
               onValueChange={setPrioritizeExpiring}
-              trackColor={{ false: AppTheme.colors.surfaceAlt, true: AppTheme.colors.green }}
+              trackColor={{
+                false: AppTheme.colors.surfaceAlt,
+                true: AppTheme.colors.green,
+              }}
               thumbColor="white"
             />
           </View>
@@ -105,7 +148,9 @@ export default function Recipes() {
 
           <View style={styles.preferenceRow}>
             <View style={styles.preferenceTextWrap}>
-              <Text style={styles.preferenceLabel}>Use items from my inventory only</Text>
+              <Text style={styles.preferenceLabel}>
+                Use items from my inventory only
+              </Text>
               <Text style={styles.preferenceHint}>
                 Limit recipe ideas to foods currently assigned to you.
               </Text>
@@ -113,7 +158,10 @@ export default function Recipes() {
             <Switch
               value={useMyInventoryOnly}
               onValueChange={setUseMyInventoryOnly}
-              trackColor={{ false: AppTheme.colors.surfaceAlt, true: AppTheme.colors.green }}
+              trackColor={{
+                false: AppTheme.colors.surfaceAlt,
+                true: AppTheme.colors.green,
+              }}
               thumbColor="white"
             />
           </View>
@@ -122,15 +170,21 @@ export default function Recipes() {
 
           <View style={styles.preferenceRow}>
             <View style={styles.preferenceTextWrap}>
-              <Text style={styles.preferenceLabel}>Beginner-friendly recipes</Text>
+              <Text style={styles.preferenceLabel}>
+                Beginner-friendly recipes
+              </Text>
               <Text style={styles.preferenceHint}>
-                Favor simple meals with common tools, short steps, and low effort cleanup.
+                Favor simple meals with common tools, short steps, and low
+                effort cleanup.
               </Text>
             </View>
             <Switch
               value={keepMealsEasy}
               onValueChange={setKeepMealsEasy}
-              trackColor={{ false: AppTheme.colors.surfaceAlt, true: AppTheme.colors.green }}
+              trackColor={{
+                false: AppTheme.colors.surfaceAlt,
+                true: AppTheme.colors.green,
+              }}
               thumbColor="white"
             />
           </View>
@@ -140,7 +194,11 @@ export default function Recipes() {
           <Text style={styles.emptyText}>Loading...</Text>
         ) : recipes.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name="restaurant-outline" size={48} color={AppTheme.colors.muted} />
+            <Ionicons
+              name="restaurant-outline"
+              size={48}
+              color={AppTheme.colors.muted}
+            />
             <Text style={styles.emptyText}>
               {foodItems.length === 0
                 ? "Add pantry items first, then generate recipes."
@@ -156,16 +214,28 @@ export default function Recipes() {
                 onPress={() => setSelectedRecipe(recipe)}
               >
                 <View style={styles.recipeImageWrap}>
-                  <Ionicons name="restaurant" size={36} color={AppTheme.colors.accentDark} />
+                  <Ionicons
+                    name="restaurant"
+                    size={36}
+                    color={AppTheme.colors.accentDark}
+                  />
                 </View>
                 <View style={styles.recipeInfo}>
                   <Text style={styles.recipeName}>{recipe.title}</Text>
                   <Text style={styles.recipeDetail}>
-                    {recipe.prep_time ? `${recipe.prep_time} min` : "Quick meal idea"}
+                    {recipe.prep_time
+                      ? `${recipe.prep_time} min`
+                      : "Quick meal idea"}
                   </Text>
-                  <Text style={styles.recipeHint}>Tap to view ingredients and steps</Text>
+                  <Text style={styles.recipeHint}>
+                    Tap to view ingredients and steps
+                  </Text>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={AppTheme.colors.muted} />
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={AppTheme.colors.muted}
+                />
               </Pressable>
             ))}
           </View>
@@ -190,26 +260,35 @@ export default function Recipes() {
         transparent
         onRequestClose={() => setShowHelp(false)}
       >
-        <Pressable style={styles.helpOverlay} onPress={() => setShowHelp(false)}>
+        <Pressable
+          style={styles.helpOverlay}
+          onPress={() => setShowHelp(false)}
+        >
           <Pressable style={styles.helpCard} onPress={() => {}}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>How Recipes Works</Text>
-              <Pressable onPress={() => setShowHelp(false)} style={styles.closeButton}>
+              <Pressable
+                onPress={() => setShowHelp(false)}
+                style={styles.closeButton}
+              >
                 <Ionicons name="close" size={18} color={AppTheme.colors.text} />
               </Pressable>
             </View>
 
             <Text style={styles.helpBody}>
-              Recipes turns your pantry items into meal ideas you can actually use.
+              Recipes turns your pantry items into meal ideas you can actually
+              use.
             </Text>
             <Text style={styles.helpBullet}>
               • Prioritize expiring items to use food before it goes bad.
             </Text>
             <Text style={styles.helpBullet}>
-              • Use My Inventory Only to generate meals from foods assigned to you.
+              • Use My Inventory Only to generate meals from foods assigned to
+              you.
             </Text>
             <Text style={styles.helpBullet}>
-              • Beginner-friendly recipes keeps suggestions simpler and lower effort.
+              • Beginner-friendly recipes keeps suggestions simpler and lower
+              effort.
             </Text>
             <Text style={styles.helpBullet}>
               • Tap Generate Recipes to create a fresh batch of meal ideas.
@@ -218,7 +297,10 @@ export default function Recipes() {
               • Tap any recipe card to view ingredients and instructions.
             </Text>
 
-            <Pressable style={styles.modalButton} onPress={() => setShowHelp(false)}>
+            <Pressable
+              style={styles.modalButton}
+              onPress={() => setShowHelp(false)}
+            >
               <Text style={styles.modalButtonText}>Got it</Text>
             </Pressable>
           </Pressable>
@@ -231,36 +313,60 @@ export default function Recipes() {
         transparent
         onRequestClose={() => setSelectedRecipe(null)}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => setSelectedRecipe(null)}>
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setSelectedRecipe(null)}
+        >
           <Pressable style={styles.modalCard} onPress={() => {}}>
             {selectedRecipe ? (
               <>
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>{selectedRecipe.title}</Text>
-                  <Pressable onPress={() => setSelectedRecipe(null)} style={styles.closeButton}>
-                    <Ionicons name="close" size={18} color={AppTheme.colors.text} />
+                  <Pressable
+                    onPress={() => setSelectedRecipe(null)}
+                    style={styles.closeButton}
+                  >
+                    <Ionicons
+                      name="close"
+                      size={18}
+                      color={AppTheme.colors.text}
+                    />
                   </Pressable>
                 </View>
 
                 <Text style={styles.modalMeta}>
-                  {selectedRecipe.prep_time ? `${selectedRecipe.prep_time} min` : "Flexible prep time"}
-                  {selectedRecipe.servings ? ` • ${selectedRecipe.servings} servings` : ""}
+                  {selectedRecipe.prep_time
+                    ? `${selectedRecipe.prep_time} min`
+                    : "Flexible prep time"}
+                  {selectedRecipe.servings
+                    ? ` • ${selectedRecipe.servings} servings`
+                    : ""}
                 </Text>
 
                 <ScrollView showsVerticalScrollIndicator={false}>
                   <Text style={styles.sectionLabel}>Ingredients</Text>
-                  {toStringList(selectedRecipe.ingredients).map((ingredient, index) => (
-                    <Text key={`${selectedRecipe.id}-ingredient-${index}`} style={styles.modalBullet}>
-                      • {ingredient}
-                    </Text>
-                  ))}
+                  {toStringList(selectedRecipe.ingredients).map(
+                    (ingredient, index) => (
+                      <Text
+                        key={`${selectedRecipe.id}-ingredient-${index}`}
+                        style={styles.modalBullet}
+                      >
+                        • {ingredient}
+                      </Text>
+                    ),
+                  )}
 
                   <Text style={styles.sectionLabel}>Instructions</Text>
-                  {toStringList(selectedRecipe.instructions).map((step, index) => (
-                    <Text key={`${selectedRecipe.id}-step-${index}`} style={styles.modalBullet}>
-                      {index + 1}. {step}
-                    </Text>
-                  ))}
+                  {toStringList(selectedRecipe.instructions).map(
+                    (step, index) => (
+                      <Text
+                        key={`${selectedRecipe.id}-step-${index}`}
+                        style={styles.modalBullet}
+                      >
+                        {index + 1}. {step}
+                      </Text>
+                    ),
+                  )}
                 </ScrollView>
               </>
             ) : null}

@@ -35,7 +35,8 @@ create table public.household_members (
   user_id uuid not null references public.profiles on delete cascade,
   role public.member_role not null default 'member',
   joined_at timestamptz not null default now(),
-  unique (household_id, user_id)
+  unique (household_id, user_id),
+  unique (user_id)
 );
 
 -- Food items: scanned / manually entered inventory
@@ -176,6 +177,10 @@ create policy "Authenticated users can join household"
   on public.household_members for insert
   to authenticated
   with check (user_id = auth.uid());
+
+create policy "Users can leave household"
+  on public.household_members for delete
+  using (user_id = auth.uid());
 
 -- Food items: scoped to household
 create policy "Members can view food items"

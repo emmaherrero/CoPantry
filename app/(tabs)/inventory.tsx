@@ -21,12 +21,14 @@ function getExpirationInfo(item: FoodItem) {
   if (!item.expiration_date) return { label: "No date", color: AppTheme.colors.surfaceAlt, textColor: AppTheme.colors.text };
 
   const now = new Date();
-  const exp = new Date(item.expiration_date);
-  const diffMs = exp.getTime() - now.getTime();
+  const todayAtMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const [year, month, day] = item.expiration_date.split("-").map(Number);
+  const exp = new Date(year, month - 1, day);
+  const diffMs = exp.getTime() - todayAtMidnight.getTime();
   const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
-  if (diffDays < 0) return { label: "Expired", color: AppTheme.colors.redSoft, textColor: AppTheme.colors.text };
-  if (diffDays <= 3) return { label: `${diffDays} day${diffDays !== 1 ? "s" : ""} until expiration`, color: AppTheme.colors.orangeSoft, textColor: AppTheme.colors.text };
+  if (diffDays <= 0) return { label: "Expired", color: AppTheme.colors.redSoft, textColor: "#ff4d50" };
+  if (diffDays <= 7) return { label: `${diffDays} day${diffDays !== 1 ? "s" : ""} until expiration`, color: AppTheme.colors.orangeSoft, textColor: "#fa9632" };
   return { label: `${diffDays} days until expiration`, color: AppTheme.colors.greenSoft, textColor: AppTheme.colors.text };
 }
 

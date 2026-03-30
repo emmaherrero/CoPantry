@@ -13,6 +13,8 @@ type HouseholdState = {
   userProfile: Profile | null;
   loading: boolean;
   refresh: () => Promise<void>;
+  setHouseholdState: (household: Household) => void;
+  updateProfileState: (profile: Profile) => void;
   upsertFoodItem: (item: FoodItem) => void;
   removeFoodItem: (id: string) => void;
 };
@@ -25,6 +27,8 @@ const HouseholdContext = createContext<HouseholdState>({
   userProfile: null,
   loading: true,
   refresh: async () => {},
+  setHouseholdState: () => {},
+  updateProfileState: () => {},
   upsertFoodItem: () => {},
   removeFoodItem: () => {},
 });
@@ -37,6 +41,21 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [userProfile, setUserProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const setHouseholdState = useCallback((nextHousehold: Household) => {
+    setHousehold(nextHousehold);
+  }, []);
+
+  const updateProfileState = useCallback((nextProfile: Profile) => {
+    setUserProfile(nextProfile);
+    setMembers((prev) =>
+      prev.map((member) =>
+        member.user_id === nextProfile.id
+          ? { ...member, profiles: nextProfile }
+          : member,
+      ),
+    );
+  }, []);
 
   const upsertFoodItem = useCallback((item: FoodItem) => {
     setFoodItems((prev) => [item, ...prev.filter((existing) => existing.id !== item.id)]);
@@ -138,6 +157,30 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
     };
   }, [household, fetchData]);
 
+  useEffect(() => {
+    if (!household) return;
+
+    const channel = supabase
+      .channel("households_changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "households",
+          filter: `id=eq.${household.id}`,
+        },
+        () => {
+          fetchData();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [household, fetchData]);
+
   return (
     <HouseholdContext.Provider
       value={{
@@ -148,6 +191,8 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
         userProfile,
         loading,
         refresh: fetchData,
+        setHouseholdState,
+        updateProfileState,
         upsertFoodItem,
         removeFoodItem,
       }}
