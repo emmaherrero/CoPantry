@@ -209,12 +209,13 @@ Generate exactly 3 recipes.
 Do not include markdown fences or commentary.
 `;
 
-    const response = await openai.responses.create({
-      model: "gpt-5",
-      input: prompt,
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "user", content: prompt }],
+      response_format: { type: "json_object" },
     });
 
-    const rawText = response.output_text?.trim();
+    const rawText = response.choices?.[0]?.message?.content?.trim();
 
     if (!rawText) {
       throw new Error("OpenAI returned an empty response.");
