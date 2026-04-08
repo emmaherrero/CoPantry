@@ -1,5 +1,5 @@
 import React from "react";
-import { StyleSheet, TextInput, View } from "react-native";
+import { StyleProp, StyleSheet, TextInput, View, ViewStyle } from "react-native";
 import { AppTheme, Fonts } from "../constants/theme";
 
 export default function Input({
@@ -9,16 +9,18 @@ export default function Input({
   autoCapitalize = "none",
   value,
   onChangeText,
+  containerStyle,
 }: {
   placeholder: string;
   secureTextEntry?: boolean;
-  keyboardType?: "default" | "email-address" | "numeric";
+  keyboardType?: "default" | "email-address" | "numeric" | "decimal-pad";
   autoCapitalize?: "none" | "sentences" | "words" | "characters";
   value?: string;
   onChangeText?: (text: string) => void;
+  containerStyle?: StyleProp<ViewStyle>;
 }) {
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, containerStyle]}>
       <TextInput
         placeholder={placeholder}
         placeholderTextColor={AppTheme.colors.muted}

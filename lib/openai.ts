@@ -8,6 +8,13 @@ type GeneratedRecipe = {
   prepTime: number | null;
 };
 
+type ExpirationEstimate = {
+  expirationDate: string;
+  shelfLifeDays: number | null;
+  confidence: "low" | "medium" | "high";
+  reasoning: string;
+};
+
 const OPENAI_ENV_NAMES = [
   "EXPO_PUBLIC_OPENAI_API_KEY",
   "OPENAI_API_KEY",
@@ -104,6 +111,28 @@ function parseRecipesPayload(payload: string): GeneratedRecipe[] {
   return recipes;
 }
 
+function parseExpirationEstimatePayload(payload: string): ExpirationEstimate {
+  const parsed = JSON.parse(cleanJsonPayload(payload)) as Record<string, unknown>;
+  const expirationDate =
+    typeof parsed.expirationDate === "string" ? parsed.expirationDate.trim() : "";
+  const reasoning = typeof parsed.reasoning === "string" ? parsed.reasoning.trim() : "";
+  const confidence =
+    parsed.confidence === "low" || parsed.confidence === "medium" || parsed.confidence === "high"
+      ? parsed.confidence
+      : "low";
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(expirationDate)) {
+    throw new Error("OpenAI returned an invalid expiration date.");
+  }
+
+  return {
+    expirationDate,
+    shelfLifeDays: clampPositiveInteger(parsed.shelfLifeDays),
+    confidence,
+    reasoning,
+  };
+}
+
 async function extractOpenAIError(response: Response) {
   try {
     const payload = await response.json();
@@ -183,6 +212,74 @@ export async function generateRecipesFromPantry(foodItems: FoodItem[]) {
   }
 
   return parseRecipesPayload(content);
+}
+
+export async function estimateExpirationDate(params: {
+  productName: string;
+  brand?: string | null;
+  storageLocation: FoodItem["storage_location"];
+  purchaseDate: string;
+  itemCategory?: "general" | "meat" | "poultry";
+  quantity?: number | null;
+  unit?: string | null;
+}) {
+  const apiKey = getOpenAIKey();
+
+  if (!apiKey) {
+    throw new Error(
+      "Missing OpenAI API key. Add EXPO_PUBLIC_OPENAI_API_KEY to your local .env file.",
+    );
+  }
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "gpt-4.1-mini",
+      temperature: 0.2,
+      messages: [
+        {
+          role: "system",
+          content: [
+            "You estimate household food expiration dates.",
+            "Use common food safety guidance and ordinary US grocery assumptions.",
+            "Assume the item is unopened unless the user says otherwise.",
+            "Return only valid JSON.",
+          ].join(" "),
+        },
+        {
+          role: "user",
+          content: [
+            'Return JSON in this shape: {"expirationDate":"YYYY-MM-DD","shelfLifeDays":number,"confidence":"low|medium|high","reasoning":"short string"}',
+            `Product: ${params.productName}`,
+            `Brand: ${params.brand?.trim() || "unknown"}`,
+            `Category: ${params.itemCategory ?? "general"}`,
+            `Amount: ${params.quantity ?? "unknown"} ${params.unit ?? "unit"}`,
+            `Storage location: ${params.storageLocation}`,
+            `Purchase date: ${params.purchaseDate}`,
+            "Estimate a practical expiration date based on when a normal household should use it by.",
+            "For meat and poultry, lean conservative and food-safe.",
+          ].join("\n"),
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractOpenAIError(response));
+  }
+
+  const payload = await response.json();
+  const content = payload?.choices?.[0]?.message?.content;
+
+  if (typeof content !== "string" || !content.trim()) {
+    throw new Error("OpenAI returned an empty response.");
+  }
+
+  return parseExpirationEstimatePayload(content);
 }
 
 export function toRecipeInsert(

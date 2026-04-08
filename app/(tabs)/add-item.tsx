@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
 import { router, useFocusEffect } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -19,6 +20,7 @@ import { AppTheme, Fonts } from "../../constants/theme";
 import { showAlert } from "../../lib/alert";
 import { useAuth } from "../../lib/auth-context";
 import { useHousehold } from "../../lib/household-context";
+import { estimateExpirationDate } from "../../lib/openai";
 import { supabase } from "../../lib/supabase";
 
 type OpenFoodFactsResponse = {
@@ -29,6 +31,17 @@ type OpenFoodFactsResponse = {
     image_url?: string;
   };
 };
+
+type ItemCategory = "general" | "meat" | "poultry";
+type WeightUnit = "lbs" | "kgs";
+
+function getTodayIsoDate() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 function formatExpirationInput(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 8);
@@ -74,6 +87,37 @@ function isExpiredDate(isoDate: string) {
   return expiration < todayAtMidnight;
 }
 
+function sanitizeQuantityInput(value: string, allowDecimal: boolean) {
+  if (!allowDecimal) {
+    return value.replace(/\D/g, "");
+  }
+
+  const sanitized = value.replace(/[^0-9.]/g, "");
+  const firstDecimalIndex = sanitized.indexOf(".");
+
+  if (firstDecimalIndex === -1) {
+    return sanitized;
+  }
+
+  return (
+    sanitized.slice(0, firstDecimalIndex + 1) +
+    sanitized.slice(firstDecimalIndex + 1).replace(/\./g, "")
+  );
+}
+
+function withOwnershipMeta(
+  nutritionMeta: Record<string, unknown> | null,
+  ownerIds: string[],
+) {
+  return {
+    ...(nutritionMeta ?? {}),
+    ownership_meta: {
+      owner_ids: ownerIds,
+      is_shared: ownerIds.length > 1,
+    },
+  };
+}
+
 export default function AddItem() {
   const { session } = useAuth();
   const { household, members, upsertFoodItem, removeFoodItem } = useHousehold();
@@ -82,7 +126,11 @@ export default function AddItem() {
   const [productName, setProductName] = useState("");
   const [brand, setBrand] = useState("");
   const [quantity, setQuantity] = useState("1");
+  const [itemCategory, setItemCategory] = useState<ItemCategory>("general");
+  const [weightUnit, setWeightUnit] = useState<WeightUnit>("lbs");
   const [expirationDate, setExpirationDate] = useState("");
+  const [purchaseDate, setPurchaseDate] = useState("");
+  const [boughtToday, setBoughtToday] = useState(false);
   const [barcode, setBarcode] = useState("");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [scanMessage, setScanMessage] = useState(
@@ -95,7 +143,9 @@ export default function AddItem() {
   const [selectedMembers, setSelectedMembers] = useState<string[]>(
     session ? [session.user.id] : [],
   );
+  const [dateMode, setDateMode] = useState<"expiration" | "purchase">("purchase");
   const [loading, setLoading] = useState(false);
+  const [estimatingExpiration, setEstimatingExpiration] = useState(false);
   const [showExpiredPopup, setShowExpiredPopup] = useState(false);
   const scanLineProgress = useRef(new Animated.Value(0)).current;
 
@@ -123,6 +173,53 @@ export default function AddItem() {
     }
 
     return (await response.json()) as OpenFoodFactsResponse;
+  };
+
+  const pickItemImage = async (source: "camera" | "library") => {
+    const permission =
+      source === "camera"
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      showAlert(
+        "Permission needed",
+        source === "camera"
+          ? "Camera access is required to take an item photo."
+          : "Photo library access is required to choose an item photo.",
+      );
+      return;
+    }
+
+    const result =
+      source === "camera"
+        ? await ImagePicker.launchCameraAsync({
+            mediaTypes: ["images"],
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.5,
+            base64: true,
+          })
+        : await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ["images"],
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.5,
+            base64: true,
+          });
+
+    if (result.canceled) {
+      return;
+    }
+
+    const asset = result.assets[0];
+    if (!asset) {
+      showAlert("Could not add photo", "No image was selected.");
+      return;
+    }
+
+    const mimeType = asset.mimeType || "image/jpeg";
+    setImageUrl(asset.base64 ? `data:${mimeType};base64,${asset.base64}` : asset.uri);
   };
 
   const handleBarcodeScanned = async ({ data }: { data: string }) => {
@@ -207,52 +304,126 @@ export default function AddItem() {
       return;
     }
 
-    // Add item for each selected member
-    const addedBy =
-      selectedMembers.length > 0 ? selectedMembers[0] : session!.user.id;
+    const owners =
+      selectedMembers.length > 0 ? selectedMembers : [session!.user.id];
+    const primaryOwner = owners[0];
 
     const trimmedProductName = productName.trim();
     const quantityValue = Number(quantity);
-    const parsedExpirationDate = parseExpirationDate(expirationDate);
+    const usesWeightUnit = itemCategory === "meat" || itemCategory === "poultry";
+    const unitValue = usesWeightUnit ? weightUnit : "unit";
+    const parsedExpirationDate =
+      dateMode === "expiration" ? parseExpirationDate(expirationDate) : null;
+    const parsedPurchaseDate =
+      dateMode === "purchase"
+        ? boughtToday
+          ? getTodayIsoDate()
+          : parseExpirationDate(purchaseDate)
+        : null;
 
-    if (!Number.isInteger(quantityValue) || quantityValue <= 0) {
-      showAlert("Invalid quantity", "Quantity must be 1 or more.");
-      return;
-    }
-
-    if (parsedExpirationDate === null) {
-      showAlert("Missing date", "Please enter the expiration date.");
-      return;
-    }
-
-    if (parsedExpirationDate === undefined) {
+    if (!Number.isFinite(quantityValue) || quantityValue <= 0) {
       showAlert(
-        "Invalid date",
-        "Please enter the expiration date as MM/DD/YYYY.",
+        "Invalid quantity",
+        usesWeightUnit ? "Enter a weight greater than 0." : "Quantity must be 1 or more.",
       );
       return;
     }
 
-    if (parsedExpirationDate && isExpiredDate(parsedExpirationDate)) {
+    if (!usesWeightUnit && !Number.isInteger(quantityValue)) {
+      showAlert("Invalid quantity", "Quantity must be a whole number.");
+      return;
+    }
+
+    if (dateMode === "expiration" && parsedExpirationDate === null) {
+      showAlert("Missing date", "Please enter the expiration date.");
+      return;
+    }
+
+    if (dateMode === "expiration" && parsedExpirationDate === undefined) {
+      showAlert("Invalid date", "Please enter the expiration date as MM/DD/YYYY.");
+      return;
+    }
+
+    if (dateMode === "purchase" && parsedPurchaseDate === null) {
+      showAlert("Missing date", "Please enter the purchase date.");
+      return;
+    }
+
+    if (dateMode === "purchase" && parsedPurchaseDate === undefined) {
+      showAlert("Invalid date", "Please enter the purchase date as MM/DD/YYYY.");
+      return;
+    }
+
+    let finalExpirationDate = parsedExpirationDate;
+    let nutritionMeta: Record<string, unknown> | null = null;
+
+    if (dateMode === "purchase" && parsedPurchaseDate) {
+      try {
+        setEstimatingExpiration(true);
+        const estimate = await estimateExpirationDate({
+          productName: trimmedProductName,
+          brand: brand.trim() || null,
+          storageLocation: storageLocation,
+          purchaseDate: parsedPurchaseDate,
+          itemCategory,
+          quantity: quantityValue,
+          unit: unitValue,
+        });
+        finalExpirationDate = estimate.expirationDate;
+        nutritionMeta = {
+          item_meta: {
+            category: itemCategory,
+            uses_weight: usesWeightUnit,
+          },
+          date_meta: {
+            purchase_date: parsedPurchaseDate,
+            expiration_source: "ai_estimate",
+            shelf_life_days: estimate.shelfLifeDays,
+            confidence: estimate.confidence,
+            reasoning: estimate.reasoning,
+          },
+        };
+      } catch (error: any) {
+        showAlert(
+          "Could not estimate expiration",
+          error?.message ?? "Please enter an expiration date manually instead.",
+        );
+        return;
+      } finally {
+        setEstimatingExpiration(false);
+      }
+    }
+
+    if (!nutritionMeta && itemCategory !== "general") {
+      nutritionMeta = {
+        item_meta: {
+          category: itemCategory,
+          uses_weight: usesWeightUnit,
+        },
+      };
+    }
+
+    if (finalExpirationDate && isExpiredDate(finalExpirationDate)) {
       setShowExpiredPopup(true);
       return;
     }
 
-    const optimisticId = `temp-${Date.now()}`;
+    const nutritionWithOwners = withOwnershipMeta(nutritionMeta, owners);
+
     const now = new Date().toISOString();
     const optimisticItem = {
-      id: optimisticId,
+      id: `temp-${Date.now()}`,
       household_id: household.id,
       barcode: barcode || null,
       product_name: trimmedProductName,
       brand: brand.trim() || null,
       image_url: imageUrl,
-      nutrition_json: null,
+      nutrition_json: nutritionWithOwners,
       quantity: quantityValue,
-      unit: "unit",
+      unit: unitValue,
       storage_location: storageLocation,
-      expiration_date: parsedExpirationDate,
-      added_by: addedBy,
+      expiration_date: finalExpirationDate,
+      added_by: primaryOwner,
       created_at: now,
       updated_at: now,
     };
@@ -264,11 +435,17 @@ export default function AddItem() {
     setProductName("");
     setBrand("");
     setQuantity("1");
+    setItemCategory("general");
+    setWeightUnit("lbs");
     setExpirationDate("");
+    setPurchaseDate("");
+    setBoughtToday(false);
     setBarcode("");
     setImageUrl(null);
     setScanMessage("Point your camera at a barcode to scan.");
     setStorageLocation("fridge");
+    setDateMode("purchase");
+    setSelectedMembers(session ? [session.user.id] : []);
     setLoading(false);
     router.back();
 
@@ -280,21 +457,23 @@ export default function AddItem() {
         product_name: trimmedProductName,
         brand: brand.trim() || null,
         image_url: imageUrl,
+        nutrition_json: nutritionWithOwners,
         quantity: quantityValue,
-        expiration_date: parsedExpirationDate,
+        unit: unitValue,
+        expiration_date: finalExpirationDate,
         storage_location: storageLocation,
-        added_by: addedBy,
+        added_by: primaryOwner,
       })
       .select("*")
       .single();
 
     if (error) {
-      removeFoodItem(optimisticId);
+      removeFoodItem(optimisticItem.id);
       showAlert("Error", error.message);
       return;
     }
 
-    removeFoodItem(optimisticId);
+    removeFoodItem(optimisticItem.id);
     if (insertedItem) {
       upsertFoodItem(insertedItem);
     }
@@ -420,20 +599,216 @@ export default function AddItem() {
               value={brand}
               onChangeText={setBrand}
             />
+            <Text style={styles.label}>Item type</Text>
+            <View style={styles.locationRow}>
+              {(["general", "meat", "poultry"] as const).map((category) => (
+                <Pressable
+                  key={category}
+                  style={[
+                    styles.locationBtn,
+                    itemCategory === category && styles.locationBtnActive,
+                  ]}
+                  onPress={() => setItemCategory(category)}
+                >
+                  <Text
+                    style={[
+                      styles.locationText,
+                      itemCategory === category && styles.locationTextActive,
+                    ]}
+                  >
+                    {category === "general"
+                      ? "General"
+                      : category.charAt(0).toUpperCase() + category.slice(1)}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
             <Input
-              placeholder="Quantity"
-              keyboardType="numeric"
+              placeholder={itemCategory === "general" ? "Quantity" : "Weight"}
+              keyboardType={itemCategory === "general" ? "numeric" : "decimal-pad"}
               value={quantity}
-              onChangeText={(value) => setQuantity(value.replace(/\D/g, ""))}
-            />
-            <Input
-              placeholder="Expiration date (MM/DD/YYYY)"
-              keyboardType="numeric"
-              value={expirationDate}
               onChangeText={(value) =>
-                setExpirationDate(formatExpirationInput(value))
+                setQuantity(sanitizeQuantityInput(value, itemCategory !== "general"))
               }
             />
+            {itemCategory !== "general" ? (
+              <>
+                <Text style={styles.label}>Weight unit</Text>
+                <View style={styles.locationRow}>
+                  {(["lbs", "kgs"] as const).map((unit) => (
+                    <Pressable
+                      key={unit}
+                      style={[
+                        styles.locationBtn,
+                        weightUnit === unit && styles.locationBtnActive,
+                      ]}
+                      onPress={() => setWeightUnit(unit)}
+                    >
+                      <Text
+                        style={[
+                          styles.locationText,
+                          weightUnit === unit && styles.locationTextActive,
+                        ]}
+                      >
+                        {unit}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </>
+            ) : null}
+            <Text style={styles.label}>Date type</Text>
+            <View style={styles.locationRow}>
+                <Pressable
+                  style={[
+                    styles.locationBtn,
+                    dateMode === "expiration" && styles.locationBtnActive,
+                  ]}
+                  onPress={() => {
+                    setDateMode("expiration");
+                    setBoughtToday(false);
+                  }}
+                >
+                <Text
+                  style={[
+                    styles.locationText,
+                    dateMode === "expiration" && styles.locationTextActive,
+                  ]}
+                >
+                  Expiration
+                </Text>
+              </Pressable>
+                <Pressable
+                  style={[
+                    styles.locationBtn,
+                    dateMode === "purchase" && styles.locationBtnActive,
+                  ]}
+                  onPress={() => {
+                    setDateMode("purchase");
+                    if (!purchaseDate.trim()) {
+                      setBoughtToday(true);
+                    }
+                  }}
+                >
+                <Text
+                  style={[
+                    styles.locationText,
+                    dateMode === "purchase" && styles.locationTextActive,
+                  ]}
+                >
+                  Bought date
+                </Text>
+              </Pressable>
+            </View>
+
+            {dateMode === "expiration" ? (
+              <Input
+                placeholder="Expiration date (MM/DD/YYYY)"
+                keyboardType="numeric"
+                value={expirationDate}
+                onChangeText={(value) =>
+                  setExpirationDate(formatExpirationInput(value))
+                }
+              />
+            ) : (
+              <>
+                <Input
+                  placeholder="Bought date (MM/DD/YYYY)"
+                  keyboardType="numeric"
+                  value={purchaseDate}
+                  onChangeText={(value) =>
+                    setPurchaseDate(formatExpirationInput(value))
+                  }
+                  containerStyle={boughtToday ? styles.disabledInput : undefined}
+                />
+                <Pressable
+                  style={styles.todayRow}
+                  onPress={() => setBoughtToday((current) => !current)}
+                >
+                  <View
+                    style={[
+                      styles.todayCheckbox,
+                      boughtToday && styles.todayCheckboxActive,
+                    ]}
+                  >
+                    {boughtToday ? (
+                      <Ionicons name="checkmark" size={14} color="#fff" />
+                    ) : null}
+                  </View>
+                  <Text style={styles.todayText}>Bought today</Text>
+                </Pressable>
+                <Text style={styles.helperText}>
+                  CoPantry will estimate the expiration date from the purchase date when you save.
+                </Text>
+              </>
+            )}
+
+            <Text style={styles.label}>Item photo</Text>
+            <View style={styles.photoSection}>
+              <Pressable
+                style={styles.photoPicker}
+                onPress={() => {
+                  void pickItemImage("camera");
+                }}
+              >
+                {imageUrl ? (
+                  <Image source={{ uri: imageUrl }} style={styles.photoPreview} />
+                ) : (
+                  <View style={styles.photoPlaceholder}>
+                    <Ionicons
+                      name="camera-outline"
+                      size={26}
+                      color={AppTheme.colors.muted}
+                    />
+                    <Text style={styles.photoPlaceholderText}>Take a photo</Text>
+                  </View>
+                )}
+              </Pressable>
+
+              <View style={styles.photoActions}>
+                <Pressable
+                  style={styles.photoActionButton}
+                  onPress={() => {
+                    void pickItemImage("camera");
+                  }}
+                >
+                  <Ionicons
+                    name="camera-outline"
+                    size={16}
+                    color={AppTheme.colors.text}
+                  />
+                  <Text style={styles.photoActionText}>Camera</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.photoActionButton}
+                  onPress={() => {
+                    void pickItemImage("library");
+                  }}
+                >
+                  <Ionicons
+                    name="images-outline"
+                    size={16}
+                    color={AppTheme.colors.text}
+                  />
+                  <Text style={styles.photoActionText}>Library</Text>
+                </Pressable>
+                {imageUrl ? (
+                  <Pressable
+                    style={styles.photoActionButton}
+                    onPress={() => setImageUrl(null)}
+                  >
+                    <Ionicons
+                      name="trash-outline"
+                      size={16}
+                      color={AppTheme.colors.red}
+                    />
+                    <Text style={[styles.photoActionText, styles.photoRemoveText]}>
+                      Remove
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
 
             <Text style={styles.label}>Storage location</Text>
             <View style={styles.locationRow}>
@@ -460,7 +835,10 @@ export default function AddItem() {
           </View>
         )}
 
-        <Text style={styles.label}>Who{"'"}s item is this?</Text>
+        <Text style={styles.label}>Assign to</Text>
+        <Text style={styles.helperText}>
+          Select one or more household members who should have this item in their inventory.
+        </Text>
 
         {members.map((member) => (
           <Pressable
@@ -496,9 +874,9 @@ export default function AddItem() {
         ))}
 
         <Button
-          title={loading ? "Adding..." : "Done"}
+          title={estimatingExpiration ? "Estimating..." : loading ? "Adding..." : "Done"}
           onPress={handleDone}
-          disabled={loading || !expirationDate.trim()}
+          disabled={loading || estimatingExpiration}
           style={styles.doneBtn}
         />
       </ScrollView>
@@ -629,6 +1007,98 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   form: { gap: 16, marginBottom: 20 },
+  photoSection: {
+    gap: 10,
+  },
+  photoPicker: {
+    alignSelf: "flex-start",
+  },
+  photoPreview: {
+    width: 120,
+    height: 120,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: AppTheme.colors.lineStrong,
+  },
+  photoPlaceholder: {
+    width: 120,
+    height: 120,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: AppTheme.colors.lineStrong,
+    backgroundColor: AppTheme.colors.surfaceAlt,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+  },
+  photoPlaceholderText: {
+    fontSize: 13,
+    fontFamily: Fonts.sans,
+    color: AppTheme.colors.muted,
+    textAlign: "center",
+  },
+  photoActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  photoActionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: AppTheme.radius.pill,
+    borderWidth: 1,
+    borderColor: AppTheme.colors.lineStrong,
+    backgroundColor: AppTheme.colors.surface,
+  },
+  photoActionText: {
+    fontSize: 13,
+    fontFamily: Fonts.sans,
+    color: AppTheme.colors.text,
+    fontWeight: "600",
+  },
+  photoRemoveText: {
+    color: AppTheme.colors.red,
+  },
+  helperText: {
+    marginTop: -4,
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: Fonts.sans,
+    color: AppTheme.colors.muted,
+  },
+  disabledInput: {
+    opacity: 0.45,
+  },
+  todayRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: -4,
+  },
+  todayCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: AppTheme.colors.lineStrong,
+    backgroundColor: AppTheme.colors.surfaceAlt,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  todayCheckboxActive: {
+    backgroundColor: AppTheme.colors.accentDark,
+    borderColor: AppTheme.colors.accentDark,
+  },
+  todayText: {
+    fontSize: 14,
+    fontFamily: Fonts.sans,
+    color: AppTheme.colors.text,
+    fontWeight: "600",
+  },
   barcodePill: {
     flexDirection: "row",
     alignItems: "center",

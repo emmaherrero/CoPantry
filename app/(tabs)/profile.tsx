@@ -661,7 +661,14 @@ export default function Profile() {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.avatarWrap}>
-          <Pressable style={styles.avatarButton} onPress={handleAvatarPress}>
+          <Pressable
+            style={styles.avatarButton}
+            onPress={handleAvatarPress}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Update profile photo"
+            accessibilityHint="Opens options to take a photo or choose one from your library"
+          >
             <View style={styles.avatar}>
               {userProfile?.avatar_url ? (
                 <Image source={{ uri: userProfile.avatar_url }} style={styles.avatarImage} />
@@ -672,6 +679,11 @@ export default function Profile() {
             <View style={styles.avatarBadge}>
               <Ionicons name="camera-outline" size={16} color={AppTheme.colors.text} />
             </View>
+          </Pressable>
+          <Pressable onPress={handleAvatarPress} hitSlop={8}>
+            <Text style={styles.avatarHelper}>
+              {userProfile?.avatar_url ? "Tap photo to change it" : "Tap photo to add one"}
+            </Text>
           </Pressable>
         </View>
 
@@ -824,6 +836,13 @@ const styles = StyleSheet.create({
   avatarWrap: { alignItems: "center", marginBottom: 12 },
   avatarButton: {
     position: "relative",
+  },
+  avatarHelper: {
+    marginTop: 10,
+    fontSize: 14,
+    fontFamily: Fonts.sans,
+    color: AppTheme.colors.accentDark,
+    textAlign: "center",
   },
   avatar: {
     width: 93,

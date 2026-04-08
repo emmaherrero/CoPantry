@@ -28,7 +28,14 @@
           "backgroundColor": "#79B3F2"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "CoPantry uses your photos so you can attach item pictures from your library.",
+          "cameraPermission": "CoPantry uses your camera so you can take item pictures."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

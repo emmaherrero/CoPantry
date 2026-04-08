@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import {
+  Alert,
   StyleSheet,
   Text,
   View,
@@ -29,7 +30,137 @@ function getExpirationInfo(item: FoodItem) {
 
   if (diffDays <= 0) return { label: "Expired", color: AppTheme.colors.redSoft, textColor: "#ff4d50" };
   if (diffDays <= 7) return { label: `${diffDays} day${diffDays !== 1 ? "s" : ""} until expiration`, color: AppTheme.colors.orangeSoft, textColor: "#fa9632" };
-  return { label: `${diffDays} days until expiration`, color: AppTheme.colors.greenSoft, textColor: AppTheme.colors.text };
+  if (diffDays < 30) {
+    const weeks = Math.ceil(diffDays / 7);
+    return {
+      label: `${weeks} week${weeks !== 1 ? "s" : ""} until expiration`,
+      color: AppTheme.colors.greenSoft,
+      textColor: AppTheme.colors.text,
+    };
+  }
+
+  const months = Math.ceil(diffDays / 30);
+  return {
+    label: `${months} month${months !== 1 ? "s" : ""} until expiration`,
+    color: AppTheme.colors.greenSoft,
+    textColor: AppTheme.colors.text,
+  };
+}
+
+function formatItemAmount(item: FoodItem) {
+  if (item.unit === "lbs" || item.unit === "kgs") {
+    return `${item.quantity} ${item.unit}`;
+  }
+
+  return `Qty ${item.quantity}`;
+}
+
+function getAssignedUserIds(item: FoodItem) {
+  if (
+    item.nutrition_json &&
+    typeof item.nutrition_json === "object" &&
+    !Array.isArray(item.nutrition_json) &&
+    "ownership_meta" in item.nutrition_json &&
+    item.nutrition_json.ownership_meta &&
+    typeof item.nutrition_json.ownership_meta === "object" &&
+    !Array.isArray(item.nutrition_json.ownership_meta) &&
+    "owner_ids" in item.nutrition_json.ownership_meta &&
+    Array.isArray(item.nutrition_json.ownership_meta.owner_ids)
+  ) {
+    return item.nutrition_json.ownership_meta.owner_ids.filter(
+      (value): value is string => typeof value === "string",
+    );
+  }
+
+  return [item.added_by];
+}
+
+function isSharedItem(item: FoodItem) {
+  return getAssignedUserIds(item).length > 1;
+}
+
+function getItemCountValue(item: FoodItem) {
+  if (item.unit === "lbs" || item.unit === "kgs") {
+    return 1;
+  }
+
+  return item.quantity;
+}
+
+function inferItemCategory(productName: string) {
+  const normalized = productName.trim().toLowerCase();
+
+  const poultryTerms = [
+    "chicken",
+    "turkey",
+    "duck",
+    "hen",
+    "poultry",
+  ];
+  const meatTerms = [
+    "beef",
+    "steak",
+    "ground beef",
+    "burger",
+    "pork",
+    "ham",
+    "bacon",
+    "sausage",
+    "lamb",
+    "veal",
+  ];
+
+  if (poultryTerms.some((term) => normalized.includes(term))) {
+    return "poultry" as const;
+  }
+
+  if (meatTerms.some((term) => normalized.includes(term))) {
+    return "meat" as const;
+  }
+
+  return null;
+}
+
+function getItemCategoryMeta(item: FoodItem) {
+  if (
+    !item.nutrition_json ||
+    typeof item.nutrition_json !== "object" ||
+    Array.isArray(item.nutrition_json)
+  ) {
+    return null;
+  }
+
+  const itemMeta =
+    "item_meta" in item.nutrition_json &&
+    item.nutrition_json.item_meta &&
+    typeof item.nutrition_json.item_meta === "object" &&
+    !Array.isArray(item.nutrition_json.item_meta)
+      ? item.nutrition_json.item_meta
+      : null;
+
+  const category =
+    itemMeta && "category" in itemMeta && typeof itemMeta.category === "string"
+      ? itemMeta.category
+      : inferItemCategory(item.product_name);
+
+  switch (category) {
+    case "meat":
+      return {
+        label: "Meat",
+        icon: "restaurant-outline" as const,
+        backgroundColor: "#ffe5de",
+        color: "#b84d2a",
+      };
+    case "poultry":
+      return {
+        label: "Poultry",
+        icon: "nutrition-outline" as const,
+        backgroundColor: "#fff1d9",
+        color: "#a06700",
+      };
+    default:
+      return null;
+  }
 }
 
 type SortOption = "newest" | "expiring" | "name";
@@ -113,14 +244,14 @@ function StatBox({
   );
 }
 
-function FoodItemCard({ item, onIncrement, onDecrement, onPress }: {
+function FoodItemCard({ item, onPress }: {
   item: FoodItem;
-  onIncrement: () => void;
-  onDecrement: () => void;
   onPress: () => void;
 }) {
   const exp = getExpirationInfo(item);
   const storage = getStorageMeta(item.storage_location);
+  const category = getItemCategoryMeta(item);
+  const shared = isSharedItem(item);
 
   return (
     <View style={styles.itemCard}>
@@ -145,22 +276,24 @@ function FoodItemCard({ item, onIncrement, onDecrement, onPress }: {
               <Ionicons name={storage.icon} size={12} color={storage.color} />
               <Text style={[styles.storageText, { color: storage.color }]}>{storage.label}</Text>
             </View>
+            {shared ? (
+              <View style={styles.sharedBadge}>
+                <Ionicons name="people-outline" size={12} color={AppTheme.colors.accentDark} />
+                <Text style={styles.sharedText}>Shared</Text>
+              </View>
+            ) : null}
+            {category ? (
+              <View style={[styles.categoryBadge, { backgroundColor: category.backgroundColor }]}>
+                <Ionicons name={category.icon} size={12} color={category.color} />
+                <Text style={[styles.categoryText, { color: category.color }]}>{category.label}</Text>
+              </View>
+            ) : null}
           </View>
         </View>
       </Pressable>
 
-      <View style={styles.itemQty}>
-        <Pressable onPress={onDecrement} style={styles.qtyBtn}>
-          <View style={styles.qtyCircle}>
-            <Text style={styles.qtySymbol}>-</Text>
-          </View>
-        </Pressable>
-        <Text style={styles.qtyValue}>{item.quantity}</Text>
-        <Pressable onPress={onIncrement} style={styles.qtyBtn}>
-          <View style={styles.qtyCircle}>
-            <Text style={styles.qtySymbol}>+</Text>
-          </View>
-        </Pressable>
+      <View style={styles.itemQtyBadge}>
+        <Text style={styles.itemQtyText}>{formatItemAmount(item)}</Text>
       </View>
     </View>
   );
@@ -177,7 +310,9 @@ export default function Inventory() {
   const [showHelp, setShowHelp] = useState(false);
 
   // Filter to user's own items
-  const myItems = foodItems.filter((item) => item.added_by === session?.user.id);
+  const myItems = foodItems.filter((item) =>
+    session?.user.id ? getAssignedUserIds(item).includes(session.user.id) : false,
+  );
   const now = new Date();
   const filteredItems = myItems.filter((item) => {
     const matchesStorage =
@@ -207,50 +342,26 @@ export default function Inventory() {
     }
   });
 
-  const totalItems = myItems.reduce((sum, item) => sum + item.quantity, 0);
+  const totalItems = myItems.reduce((sum, item) => sum + getItemCountValue(item), 0);
   const expiring = myItems.reduce((sum, item) => {
     if (!item.expiration_date) return sum;
     const diff = new Date(item.expiration_date).getTime() - now.getTime();
     const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-    return days > 0 && days <= 7 ? sum + item.quantity : sum;
+    return days > 0 && days <= 7 ? sum + getItemCountValue(item) : sum;
   }, 0);
   const expired = myItems.reduce((sum, item) => {
     if (!item.expiration_date) return sum;
-    return new Date(item.expiration_date) < now ? sum + item.quantity : sum;
+    return new Date(item.expiration_date) < now ? sum + getItemCountValue(item) : sum;
   }, 0);
-
-  const updateQuantity = async (item: FoodItem, delta: number) => {
-    const newQty = item.quantity + delta;
-    const previousItem = item;
-
-    if (newQty <= 0) {
-      removeFoodItem(item.id);
-
-      const { error } = await supabase.from("food_items").delete().eq("id", item.id);
-      if (error) {
-        upsertFoodItem(previousItem);
-      }
-    } else {
-      upsertFoodItem({
-        ...item,
-        quantity: newQty,
-        updated_at: new Date().toISOString(),
-      });
-
-      const { error } = await supabase
-        .from("food_items")
-        .update({ quantity: newQty })
-        .eq("id", item.id);
-      if (error) {
-        upsertFoodItem(previousItem);
-      }
-    }
-  };
 
   const handleSaveItem = async (values: {
     product_name: string;
     brand: string | null;
     storage_location: FoodItem["storage_location"];
+    image_url: string | null;
+    quantity: number;
+    expiration_date: string | null;
+    nutrition_json: FoodItem["nutrition_json"];
   }) => {
     if (!selectedItem) return;
 
@@ -259,6 +370,10 @@ export default function Inventory() {
       ...selectedItem,
       product_name: values.product_name,
       brand: values.brand,
+      image_url: values.image_url,
+      quantity: values.quantity,
+      expiration_date: values.expiration_date,
+      nutrition_json: values.nutrition_json,
       storage_location: values.storage_location,
       updated_at: new Date().toISOString(),
     };
@@ -271,6 +386,10 @@ export default function Inventory() {
       .update({
         product_name: values.product_name,
         brand: values.brand,
+        image_url: values.image_url,
+        quantity: values.quantity,
+        expiration_date: values.expiration_date,
+        nutrition_json: values.nutrition_json,
         storage_location: values.storage_location,
       })
       .eq("id", selectedItem.id);
@@ -284,6 +403,41 @@ export default function Inventory() {
 
     setSavingItem(false);
     setSelectedItem(null);
+  };
+
+  const handleDeleteItem = () => {
+    if (!selectedItem) return;
+
+    const itemToDelete = selectedItem;
+
+    Alert.alert(
+      "Delete item?",
+      `Remove ${itemToDelete.product_name} from your inventory?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setSavingItem(true);
+            removeFoodItem(itemToDelete.id);
+            setSelectedItem(null);
+
+            const { error } = await supabase
+              .from("food_items")
+              .delete()
+              .eq("id", itemToDelete.id);
+
+            if (error) {
+              upsertFoodItem(itemToDelete);
+              showAlert("Error", error.message);
+            }
+
+            setSavingItem(false);
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -397,8 +551,6 @@ export default function Inventory() {
               <FoodItemCard
                 key={item.id}
                 item={item}
-                onIncrement={() => updateQuantity(item, 1)}
-                onDecrement={() => updateQuantity(item, -1)}
                 onPress={() => setSelectedItem(item)}
               />
             ))}
@@ -428,7 +580,7 @@ export default function Inventory() {
               • Tap a card to edit the name, brand, or storage location.
             </Text>
             <Text style={styles.modalBullet}>
-              • Use + and - to update quantity quickly.
+              • Tap an item to change its quantity, photo, or dates.
             </Text>
             <Text style={styles.modalBullet}>
               • Tap Expiring or Expired to focus on items that need attention.
@@ -454,6 +606,7 @@ export default function Inventory() {
         onClose={() => {
           if (!savingItem) setSelectedItem(null);
         }}
+        onDelete={handleDeleteItem}
         onSave={handleSaveItem}
       />
     </View>
@@ -680,18 +833,49 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontFamily: Fonts.sans,
   },
-  itemQty: { flexDirection: "row", alignItems: "center", gap: 6 },
-  qtyBtn: { padding: 2 },
-  qtyCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+  categoryBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: AppTheme.radius.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    alignSelf: "flex-start",
+  },
+  categoryText: {
+    fontSize: 10,
+    fontWeight: "700",
+    fontFamily: Fonts.sans,
+  },
+  sharedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: AppTheme.radius.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    alignSelf: "flex-start",
+    backgroundColor: AppTheme.colors.accentSoft,
+  },
+  sharedText: {
+    fontSize: 10,
+    fontWeight: "700",
+    fontFamily: Fonts.sans,
+    color: AppTheme.colors.accentDark,
+  },
+  itemQtyBadge: {
+    marginLeft: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: AppTheme.radius.pill,
+    backgroundColor: AppTheme.colors.surfaceAlt,
     borderWidth: 1,
     borderColor: AppTheme.colors.lineStrong,
-    backgroundColor: AppTheme.colors.greenSoft,
-    alignItems: "center",
-    justifyContent: "center",
   },
-  qtySymbol: { fontSize: 16, color: AppTheme.colors.text, fontWeight: "700", fontFamily: Fonts.sans },
-  qtyValue: { fontSize: 20, fontWeight: "700", fontFamily: Fonts.sans, minWidth: 20, textAlign: "center", color: AppTheme.colors.text },
+  itemQtyText: {
+    fontSize: 13,
+    fontWeight: "700",
+    fontFamily: Fonts.sans,
+    color: AppTheme.colors.text,
+  },
 });
