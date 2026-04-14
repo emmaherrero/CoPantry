@@ -133,7 +133,7 @@ Deno.serve(async (req) => {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized." }), {
+      return new Response(JSON.stringify({ error: "Session expired. Please log out and log back in." }), {
         status: 401,
         headers: corsHeaders,
       });

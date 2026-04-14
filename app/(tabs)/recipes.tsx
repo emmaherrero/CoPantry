@@ -14,6 +14,7 @@ import { AppTheme, Fonts } from "../../constants/theme";
 import { showAlert } from "../../lib/alert";
 import type { Recipe } from "../../lib/database.types";
 import { useHousehold } from "../../lib/household-context";
+import { useAuth } from "../../lib/auth-context";
 import { supabase } from "../../lib/supabase";
 import {
   FunctionsFetchError,
@@ -69,12 +70,22 @@ export default function Recipes() {
     try {
       setGenerating(true);
 
+      // Ensure we have a valid session before calling the edge function
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        showAlert("Session expired", "Please log out and log back in.");
+        return;
+      }
+
       const { error } = await supabase.functions.invoke("generate-recipes", {
         body: {
           householdId: household.id,
           prioritizeExpiring,
           useMyInventoryOnly,
           keepMealsEasy,
+        },
+        headers: {
+          Authorization: `Bearer ${sessionData.session.access_token}`,
         },
       });
 

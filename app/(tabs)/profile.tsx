@@ -19,7 +19,7 @@ import { router } from "expo-router";
 import Button from "../../components/Button";
 import Input from "../../components/Input";
 import { AppTheme, Fonts } from "../../constants/theme";
-import { showAlert } from "../../lib/alert";
+import { showAlert, showConfirm } from "../../lib/alert";
 import { useAuth } from "../../lib/auth-context";
 import { useHousehold } from "../../lib/household-context";
 import { supabase } from "../../lib/supabase";
@@ -229,69 +229,44 @@ export default function Profile() {
       return;
     }
 
-    Alert.alert(
+    showConfirm(
       "Leave household?",
       "This will delete all items you added to this household and remove you from it.",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Leave",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setSaving(true);
+      async () => {
+        try {
+          setSaving(true);
 
-              const { error: deleteItemsError } = await supabase
-                .from("food_items")
-                .delete()
-                .eq("household_id", household.id)
-                .eq("added_by", session.user.id);
+          const { error: deleteItemsError } = await supabase
+            .from("food_items")
+            .delete()
+            .eq("household_id", household.id)
+            .eq("added_by", session.user.id);
 
-              if (deleteItemsError) {
-                throw deleteItemsError;
-              }
+          if (deleteItemsError) {
+            throw deleteItemsError;
+          }
 
-              const { error: leaveError } = await supabase
-                .from("household_members")
-                .delete()
-                .eq("user_id", session.user.id);
+          const { error: leaveError } = await supabase
+            .from("household_members")
+            .delete()
+            .eq("user_id", session.user.id);
 
-              if (leaveError) {
-                throw leaveError;
-              }
+          if (leaveError) {
+            throw leaveError;
+          }
 
-              const { count: remainingMemberships, error: verifyLeaveError } = await supabase
-                .from("household_members")
-                .select("id", { count: "exact", head: true })
-                .eq("user_id", session.user.id)
-                .limit(1);
-
-              if (verifyLeaveError) {
-                throw verifyLeaveError;
-              }
-
-              if ((remainingMemberships ?? 0) > 0) {
-                throw new Error(
-                  "Your household membership still exists in the database. This usually means the live Supabase delete policy has not been applied yet.",
-                );
-              }
-
-              await refresh();
-              router.replace("/setup");
-            } catch (error: any) {
-              showAlert(
-                "Could not leave household",
-                error.message ?? "Please try again after updating your database policies.",
-              );
-            } finally {
-              setSaving(false);
-            }
-          },
-        },
-      ],
+          await refresh();
+          router.replace("/setup");
+        } catch (error: any) {
+          showAlert(
+            "Could not leave household",
+            error.message ?? "Something went wrong. Please try again.",
+          );
+        } finally {
+          setSaving(false);
+        }
+      },
+      "Leave",
     );
   };
 
